@@ -14,9 +14,16 @@ function readFileAsDataURL(file: File): Promise<string> {
 export default function App() {
   const [fgSrc, setFgSrc] = useState<string | null>(null);
   const [bgSrc, setBgSrc] = useState<string | null>(null);
-  const [depthSrc, setDepthSrc] = useState<string | null>(null); // optional, not used yet
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const [depthSrc, setDepthSrc] = useState<string | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null); //canvas reference
+  const maskRef = useRef<HTMLCanvasElement | null>(null); //mask reference
+  const shadowRef = useRef<HTMLCanvasElement | null>(null); //shadow reference
   const [light, setLight] = useState<Light>({ angle: 45, elev: 35 });
+  const [fgPlacement, setFgPlacement] = useState<{
+    x: number; y: number; w: number; h: number;
+  } | null>(null);
+
+
 
   async function onPickFg(file: File | null) {
     if (!file) {
@@ -42,6 +49,7 @@ export default function App() {
     setDepthSrc(await readFileAsDataURL(file));
   }
 
+  //canvas draw effect
   useEffect(() => {
     //failsafes
     if (!bgSrc) return; 
@@ -75,6 +83,7 @@ export default function App() {
 
         const y = Math.round(canvas.height - h);
 
+        setFgPlacement({x, y, w, h});
         ctx.drawImage(fg, x, y, w, h);
       };
 
@@ -82,7 +91,56 @@ export default function App() {
     };
     bg.src = bgSrc;
   }, [bgSrc, fgSrc]);
-  
+
+  //mask draw affect
+  useEffect(() => {
+    if (!fgSrc) return;
+    if (!fgPlacement) return;
+
+    const maskCanvas = maskRef.current;
+    if (!maskCanvas) return;
+
+    const ctx = maskCanvas.getContext("2d");
+    if (!ctx) return;
+
+    // create an offscreen canvas to draw the FG at the same size as in the composite
+    const off = document.createElement("canvas");
+    off.width = fgPlacement.w;
+    off.height = fgPlacement.h;
+
+    const offCtx = off.getContext("2d");
+    if (!offCtx) return;
+
+    const fg = new Image();
+    fg.onload = () => {
+      // draw foreground into offscreen at the exact composite size
+      offCtx.clearRect(0, 0, off.width, off.height); //clear any old pixels
+      offCtx.drawImage(fg, 0, 0, off.width, off.height); //draw the foreground image
+
+      // read pixels to get alpha
+      const imgData = offCtx.getImageData(0, 0, off.width, off.height);
+      const d = imgData.data;
+
+      // convert alpha to grayscale mask
+      // white = opaque (subject), black = transparent
+      for (let i = 0; i < d.length; i += 4) {
+        const a = d[i + 3];
+        d[i + 0] = a; //setting all color channels to alpha level
+        d[i + 1] = a;
+        d[i + 2] = a;
+        d[i + 3] = 255; //all mask pixels have to be fully opaque so alpha will be set to max
+      }
+
+      // show mask at 1:1 pixel size with the drawn FG size
+      maskCanvas.width = off.width;
+      maskCanvas.height = off.height;
+
+      ctx.putImageData(imgData, 0, 0);
+    };
+
+    fg.src = fgSrc;
+  }, [fgSrc, fgPlacement]);
+
   return (
     <div style={{ padding: 20, fontFamily: "system-ui, sans-serif" }}>
       <h1 style={{ marginTop: 0 }}>Realistic Shadow Generator</h1>
@@ -117,7 +175,7 @@ export default function App() {
         </label>
       </div>
 
-      {/* Light controls (stored only for now) */}
+      {/* light controls (stored only for now) */}
       <div style={{ marginTop: 14, display: "flex", gap: 16, flexWrap: "wrap" }}>
         <label style={{ display: "grid", gap: 6, minWidth: 260 }}>
           Light angle: {light.angle}°
@@ -184,6 +242,39 @@ export default function App() {
               Upload a foreground cutout (PNG with transparency is best)
             </div>
           )}
+        </div>
+      </div>
+
+      {/* mask preview */}
+      <div
+        style={{
+        marginTop: 18,
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 16,
+        alignItems: "start",
+        }}
+      >
+        <div>
+          <h3 style={{ margin: "8px 0" }}>mask_debug</h3>
+          <canvas
+            ref={maskRef}
+            style={{ width: "100%", border: "1px solid #ccc", display: "block" }}
+          />
+          <div style={{ marginTop: 6, opacity: 0.7, fontSize: 13 }}>
+            White = subject (alpha), Black = transparent.
+          </div>
+        </div>
+
+        <div>
+          <h3 style={{ margin: "8px 0" }}>shadow_only (next)</h3>
+          <canvas
+            ref={shadowRef}
+            style={{ width: "100%", border: "1px solid #ccc", display: "block" }}
+          />
+          <div style={{ marginTop: 6, opacity: 0.7, fontSize: 13 }}>
+            We’ll project the silhouette here next.
+          </div>
         </div>
       </div>
 
