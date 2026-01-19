@@ -168,11 +168,20 @@ useEffect(() => {
   sctx.clearRect(0,0, shadowCanvas.width, shadowCanvas.height);
 
   const fg = new Image();
+
   fg.onload = () => {
-    const dx = Math.round(fgPlacement.w * 0.35); //pushing shadow sideways
-    const dy = Math.round(fgPlacement.h * 0.20); //pushing shadow down
-    const squashY = 0.35; //make shadow flattened on the gronud
-    const shearX = 0.6; //skew to simulate direction
+    const rad = (light.angle * Math.PI) / 180;
+
+    const dirX = Math.cos(rad); //unti direction vector
+    const dirY = Math.sin(rad); 
+    const elevClamped = Math.max(1, Math.min(89,light.elev));
+    const elevRad = (elevClamped * Math.PI) / 180;
+    const length = (1 / Math.tan(elevRad)) * fgPlacement.h;
+
+    const dx = Math.round(dirX * length * 0.25);
+    const dy = Math.round(dirY * length * 0.25);
+    const squashY = Math.max(0.15, Math.min(0.6, 0.15 + 0.45 * (1 / Math.tan(elevRad)) / 3)); //make shadow flatten more when its long and less when its short
+    const shearX = 0.9; //skew to simulate direction
 
     sctx.save();
     sctx.globalAlpha = 0.45; //making the entire shadow have the same opacity
@@ -185,7 +194,7 @@ useEffect(() => {
   };
   fg.src = fgSrc; //browser loads and decodes the image
 
-}, [bgSrc, fgSrc, fgPlacement]);
+}, [bgSrc, fgSrc, fgPlacement, light]);
 
   return (
     <div style={{ padding: 20, fontFamily: "system-ui, sans-serif" }}>
