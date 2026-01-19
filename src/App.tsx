@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Light = { angle: number; elev: number };
 
@@ -15,7 +15,7 @@ export default function App() {
   const [fgSrc, setFgSrc] = useState<string | null>(null);
   const [bgSrc, setBgSrc] = useState<string | null>(null);
   const [depthSrc, setDepthSrc] = useState<string | null>(null); // optional, not used yet
-
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [light, setLight] = useState<Light>({ angle: 45, elev: 35 });
 
   async function onPickFg(file: File | null) {
@@ -42,6 +42,47 @@ export default function App() {
     setDepthSrc(await readFileAsDataURL(file));
   }
 
+  useEffect(() => {
+    //failsafes
+    if (!bgSrc) return; 
+    const canvas = canvasRef.current; 
+    if(!canvas) return; 
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const bg = new Image();
+    bg.onload = () => {
+      canvas.width = bg.naturalWidth;
+      canvas.height = bg.naturalHeight;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(bg, 0 ,0);
+      
+      if (!fgSrc) return;
+      const fg = new Image();
+
+      fg.onload = () => {
+        const scale = Math.min(
+          (canvas.width * 0.6) / fg.naturalWidth,
+          (canvas.height * 0.8) / fg.naturalHeight
+        );
+
+        //computing width, height, and position for drawing
+        const w = Math.round(fg.naturalWidth * scale);
+
+        const h = Math.round(fg.naturalHeight * scale);
+
+        const x = Math.round((canvas.width - w)/2);
+
+        const y = Math.round(canvas.height - h);
+
+        ctx.drawImage(fg, x, y, w, h);
+      };
+
+      fg.src = fgSrc;
+    };
+    bg.src = bgSrc;
+  }, [bgSrc, fgSrc]);
+  
   return (
     <div style={{ padding: 20, fontFamily: "system-ui, sans-serif" }}>
       <h1 style={{ marginTop: 0 }}>Realistic Shadow Generator</h1>
