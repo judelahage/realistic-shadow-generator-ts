@@ -285,6 +285,18 @@ useEffect(() => {
           )}
         </div>
       </div>
+      
+      <div style = {{ marginTop: 18}}>
+        <h3 style={{margin:"8px 0"}}>Composite Preview</h3>
+        <canvas
+          ref={canvasRef}
+          style={{width:"100%", border: "1px solid #ccc", display: "block"}}
+        />
+
+        <div style = {{marginTop: 6, opacity: 0.7, fontSize: 13}}>
+          This canvas is what the shadow and mask are based on.
+        </div>
+      </div>
 
       {/* mask preview */}
       <div
