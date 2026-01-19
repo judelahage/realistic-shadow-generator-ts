@@ -141,6 +141,47 @@ export default function App() {
     fg.src = fgSrc;
   }, [fgSrc, fgPlacement]);
 
+//shadow effect
+useEffect(() => {
+  //failsafes
+  if(!bgSrc) return;
+  if (!fgSrc) return;
+  if (!fgPlacement) return;
+
+  //initializing canvases and their correct size
+  const baseCanvas = canvasRef.current;
+  const shadowCanvas = shadowRef.current;
+
+  if(!baseCanvas || !shadowCanvas) return;
+
+  const sctx = shadowCanvas.getContext("2d"); //shadow context
+  if(!sctx) return;
+
+  shadowCanvas.width = baseCanvas.width;
+  shadowCanvas.height = baseCanvas.height;
+
+  sctx.clearRect(0,0, shadowCanvas.width, shadowCanvas.height);
+
+  const fg = new Image();
+  fg.onload = () => {
+    const dx = Math.round(fgPlacement.w * 0.35); //pushing shadow sideways
+    const dy = Math.round(fgPlacement.h * 0.20); //pushing shadow down
+    const squashY = 0.35; //make shadow flattened on the gronud
+    const shearX = 0.6; //skew to simulate direction
+
+    sctx.save();
+    sctx.globalAlpha = 0.45; //making the entire shadow have the same opacity
+    sctx.translate(fgPlacement.x + dx, fgPlacement.y + fgPlacement.h + dy); //anchoring the shadow at the object's bottom left corner
+    sctx.transform(1, 0, shearX, squashY, 0, 0);
+    sctx.drawImage(fg, 0, -fgPlacement.h, fgPlacement.w, fgPlacement.h);
+    
+    sctx.restore();
+
+  };
+  fg.src = fgSrc; //browser loads and decodes the image
+
+}, [bgSrc, fgSrc, fgPlacement]);
+
   return (
     <div style={{ padding: 20, fontFamily: "system-ui, sans-serif" }}>
       <h1 style={{ marginTop: 0 }}>Realistic Shadow Generator</h1>
