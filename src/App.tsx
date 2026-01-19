@@ -64,6 +64,11 @@ export default function App() {
       canvas.height = bg.naturalHeight;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(bg, 0 ,0);
+
+      const shadowCanvas = shadowRef.current; //pull shadowCanvas reference
+      if(shadowCanvas && shadowCanvas.width > 0 && shadowCanvas.height > 0){ //if shadow canvas has something then composite it under the foreground to display the shadow
+        ctx.drawImage(shadowCanvas, 0,0);
+      }
       
       if (!fgSrc) return;
       const fg = new Image();
@@ -90,7 +95,7 @@ export default function App() {
       fg.src = fgSrc;
     };
     bg.src = bgSrc;
-  }, [bgSrc, fgSrc]);
+  }, [bgSrc, fgSrc, light]);
 
   //mask draw affect
   useEffect(() => {
