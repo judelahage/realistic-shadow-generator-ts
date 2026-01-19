@@ -19,6 +19,7 @@ export default function App() {
   const maskRef = useRef<HTMLCanvasElement | null>(null); //mask reference
   const shadowRef = useRef<HTMLCanvasElement | null>(null); //shadow reference
   const [light, setLight] = useState<Light>({ angle: 45, elev: 35 });
+  const [maskVersion, setMaskVersion] = useState(0);
   const [fgPlacement, setFgPlacement] = useState<{
     x: number; y: number; w: number; h: number;
   } | null>(null);
@@ -141,6 +142,7 @@ export default function App() {
       maskCanvas.height = off.height;
 
       ctx.putImageData(imgData, 0, 0);
+      setMaskVersion((v) => v + 1);
     };
 
     fg.src = fgSrc;
@@ -154,10 +156,11 @@ useEffect(() => {
   if (!fgPlacement) return;
 
   //initializing canvases and their correct size
-  const baseCanvas = canvasRef.current;
-  const shadowCanvas = shadowRef.current;
+  const baseCanvas = canvasRef.current; //pull base canvas reference
+  const shadowCanvas = shadowRef.current; //pull shadow canvas reference
+  const maskCanvas = maskRef.current; //pull mask canvas reference
 
-  if(!baseCanvas || !shadowCanvas) return;
+  if(!baseCanvas || !shadowCanvas || !maskCanvas) return;
 
   const sctx = shadowCanvas.getContext("2d"); //shadow context
   if(!sctx) return;
@@ -167,34 +170,27 @@ useEffect(() => {
 
   sctx.clearRect(0,0, shadowCanvas.width, shadowCanvas.height);
 
-  const fg = new Image();
+  const rad = (light.angle * Math.PI) / 180; //light angle in radians
+  const dirX = Math.cos(rad); //unit direction vector
+  const dirY = Math.sin(rad); 
+  const elevClamped = Math.max(1, Math.min(89,light.elev));
+  const elevRad = (elevClamped * Math.PI) / 180;
+  const length = (1 / Math.tan(elevRad)) * fgPlacement.h;
 
-  fg.onload = () => {
-    const rad = (light.angle * Math.PI) / 180;
+  const dx = Math.round(dirX * length * 0.25);
+  const dy = Math.round(dirY * length * 0.25);
+  const squashY = Math.max(0.15, Math.min(0.6, 0.15 + 0.45 * (1 / Math.tan(elevRad)) / 3)); //make shadow flatten more when its long and less when its short
+  const shearX = 0.9; //skew to simulate direction
 
-    const dirX = Math.cos(rad); //unti direction vector
-    const dirY = Math.sin(rad); 
-    const elevClamped = Math.max(1, Math.min(89,light.elev));
-    const elevRad = (elevClamped * Math.PI) / 180;
-    const length = (1 / Math.tan(elevRad)) * fgPlacement.h;
-
-    const dx = Math.round(dirX * length * 0.25);
-    const dy = Math.round(dirY * length * 0.25);
-    const squashY = Math.max(0.15, Math.min(0.6, 0.15 + 0.45 * (1 / Math.tan(elevRad)) / 3)); //make shadow flatten more when its long and less when its short
-    const shearX = 0.9; //skew to simulate direction
-
-    sctx.save();
-    sctx.globalAlpha = 0.45; //making the entire shadow have the same opacity
-    sctx.translate(fgPlacement.x + dx, fgPlacement.y + fgPlacement.h + dy); //anchoring the shadow at the object's bottom left corner
-    sctx.transform(1, 0, shearX, squashY, 0, 0);
-    sctx.drawImage(fg, 0, -fgPlacement.h, fgPlacement.w, fgPlacement.h);
+  sctx.save();
+  sctx.globalAlpha = 0.45; //making the entire shadow have the same opacity
+  sctx.translate(fgPlacement.x + dx, fgPlacement.y + fgPlacement.h + dy); //anchoring the shadow at the object's bottom left corner
+  sctx.transform(1, 0, shearX, squashY, 0, 0);
+  sctx.drawImage(maskCanvas, 0, -fgPlacement.h, fgPlacement.w, fgPlacement.h);
     
-    sctx.restore();
+  sctx.restore();
 
-  };
-  fg.src = fgSrc; //browser loads and decodes the image
-
-}, [bgSrc, fgSrc, fgPlacement, light]);
+}, [bgSrc, fgSrc, fgPlacement, light, maskVersion]);
 
   return (
     <div style={{ padding: 20, fontFamily: "system-ui, sans-serif" }}>
