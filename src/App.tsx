@@ -161,6 +161,7 @@ useEffect(() => {
   const maskCanvas = maskRef.current; //pull mask canvas reference
 
   if(!baseCanvas || !shadowCanvas || !maskCanvas) return;
+  if(maskCanvas.width === 0 || maskCanvas.height === 0) return;
 
   const sctx = shadowCanvas.getContext("2d"); //shadow context
   if(!sctx) return;
@@ -171,24 +172,56 @@ useEffect(() => {
   sctx.clearRect(0,0, shadowCanvas.width, shadowCanvas.height);
 
   const rad = (light.angle * Math.PI) / 180; //light angle in radians
-  const dirX = Math.cos(rad); //unit direction vector
+  const dirX = Math.cos(rad); //unit direction vector of the light, multiply by length to get shadow offsets
   const dirY = Math.sin(rad); 
   const elevClamped = Math.max(1, Math.min(89,light.elev));
   const elevRad = (elevClamped * Math.PI) / 180;
-  const length = (1 / Math.tan(elevRad)) * fgPlacement.h;
+  const length = (1 / Math.tan(elevRad)) * fgPlacement.h; //big angle means short shadow, small angle means long shadow so inverse tan relationship here
 
   const dx = Math.round(dirX * length * 0.25);
   const dy = Math.round(dirY * length * 0.25);
   const squashY = Math.max(0.15, Math.min(0.6, 0.15 + 0.45 * (1 / Math.tan(elevRad)) / 3)); //make shadow flatten more when its long and less when its short
-  const shearX = 0.9; //skew to simulate direction
+  const shearX = dirX * 0.9; //skew to simulate direction
 
   sctx.save();
-  sctx.globalAlpha = 0.45; //making the entire shadow have the same opacity
+  sctx.globalAlpha = 0.45; //making the entire shadow have the same opacity, eventually will change
   sctx.translate(fgPlacement.x + dx, fgPlacement.y + fgPlacement.h + dy); //anchoring the shadow at the object's bottom left corner
   sctx.transform(1, 0, shearX, squashY, 0, 0);
   sctx.drawImage(maskCanvas, 0, -fgPlacement.h, fgPlacement.w, fgPlacement.h);
+  sctx.globalCompositeOperation = "source-in";
+  sctx.fillStyle = "black";
+  sctx.fillRect(0, -fgPlacement.h, fgPlacement.w, fgPlacement.h);
     
   sctx.restore();
+
+  //contact shadow pass
+  {
+    const contactStripPx = Math.max(6, Math.round(fgPlacement.h * 0.04)); //shadow thickness at feet
+
+    const contactAlpha = 0.55 + 0.25 * (1 / Math.tan(elevRad)) / 3; //darker shadow at contact point at feet
+    const contactAlphaClamped = Math.max(0.45, Math.min(0.85, contactAlpha));
+
+    sctx.save();
+    sctx.globalAlpha = contactAlphaClamped; //set the darker shadow with increased alpha to the contact points
+
+    sctx.translate(fgPlacement.x + dx, fgPlacement.y + fgPlacement.h + dy); //align contact shadow with main shadow direction
+    sctx.transform(1, 0, shearX, squashY, 0, 0);
+
+    // Draw only the bottom strip of the silhouette
+    sctx.drawImage(
+      maskCanvas,
+      0, fgPlacement.h - contactStripPx,
+      fgPlacement.w, contactStripPx,
+      0, -contactStripPx,
+      fgPlacement.w, contactStripPx
+    );
+
+    sctx.globalCompositeOperation = "source-in";
+    sctx.fillStyle = "black";
+    sctx.fillRect(0, -contactStripPx, fgPlacement.w, contactStripPx);
+
+    sctx.restore();
+  }
 
 }, [bgSrc, fgSrc, fgPlacement, light, maskVersion]);
 
