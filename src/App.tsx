@@ -346,17 +346,33 @@ useEffect(() => {
           display: "flex",
           
           gap: 100,
-          alignItems: "left",
+          alignItems: "flex-start",
+          flexWrap: "wrap"
         }}
       >
         <div>
           <h3 style={{ margin: "8px 0" }}>Foreground preview</h3>
           {fgSrc ? (
-            <img
-              src={fgSrc}
-              alt="Foreground preview"
-              style={{ width: "400px", height: "400px", display: "block" }}
-            />
+            <div
+              style={{
+                width: 400,
+                height: 400,
+                backgroundColor: "rgba(0,0,0,0.2)",
+                borderRadius: 8,
+                overflow: "hidden",
+              }}
+            >
+              <img
+                src={fgSrc}
+                alt="Foreground preview"
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "contain",
+                  display: "block",
+                }}
+              />
+            </div>
           ) : (
             <div style={{opacity: 0.7 }}>
               Upload a foreground cutout (PNG with transparency is best)
@@ -367,11 +383,26 @@ useEffect(() => {
         <div>
           <h3 style={{ margin: "8px 0" }}>Background preview</h3>
           {bgSrc ? (
-            <img
-              src={bgSrc}
-              alt="Background preview"
-              style={{height: "500px", display: "block" }}
-            />
+            <div
+              style={{
+                width: 500,
+                height: 500,
+                backgroundColor: "rgba(0,0,0,0.2)",
+                borderRadius: 8,
+                overflow: "hidden",
+              }}
+            >
+              <img
+                src={bgSrc}
+                alt="Background preview"
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "contain",
+                  display: "block",
+                }}
+              />
+            </div>
           ) : (
             <div style={{opacity: 0.7 }}>
               Upload a background image
@@ -382,7 +413,7 @@ useEffect(() => {
         <h3 style={{margin:"8px 0"}}>Composite Preview</h3>
         <canvas
           ref={canvasRef}
-          style={{height: "500px", display: "block"}}
+          style={{height: "500px", display: "block", backgroundColor: "rgba(0,0,0,0.2)"}}
         />
       </div>
         
