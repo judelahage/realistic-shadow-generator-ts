@@ -198,11 +198,8 @@ useEffect(() => {
   //projection factor
   const k = 1 / Math.tan(elevRad);
 
-  //direction of the shadow (angle in canvas coords)
-  const theta = Math.atan2(shadowY, shadowX);
-
   //flattening constant for the debug pass (we’ll tune later)
-  const squashY = 0.25;
+  const squashY = 0.7;
 
   //anchor at bottom-center of subject
   const w = fgPlacement.w;
@@ -215,9 +212,6 @@ useEffect(() => {
     fgPlacement.x + w / 2 + dx,
     fgPlacement.y + h + dy
   );
-
-  //rotate so shadow direction points to +x
-  sctx.rotate(theta);
 
   //project onto the "ground":
   // x' = x + (-k)*y   (shear x by y to create length)
