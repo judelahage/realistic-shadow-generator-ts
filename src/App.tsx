@@ -412,7 +412,7 @@ useEffect(() => {
           <h3 style={{ margin: "8px 0" }}>shadow_only (next)</h3>
           <canvas
             ref={shadowRef}
-            style={{ width: "100%", display: "block", backgroundColor: "white" }}
+            style={{ width: "700px", display: "block", backgroundColor: "white" }}
           />
         </div>
       </div>
