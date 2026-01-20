@@ -1,3 +1,12 @@
+/* index.css */
+
+/* Makes widths/padding behave consistently across devices */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -5,6 +14,8 @@
 
   color-scheme: light dark;
   color: rgba(255, 255, 255, 0.87);
+
+  /* This is fine as a fallback; body has your real background image */
   background-color: #242424;
 
   font-synthesis: none;
@@ -22,18 +33,26 @@ a:hover {
   color: #535bf2;
 }
 
-html, body, #root {
+html,
+body,
+#root {
   width: 100%;
   margin: 0;
   padding: 0;
+}
+
+/* Ensure the app can grow and doesn't paint a background over your image */
+#root {
+  min-height: 100vh;
+  background: transparent;
 }
 
 body {
   display: block;
   min-width: 320px;
   min-height: 100vh;
-  background: url("./assets/sea-background.jpg") center / cover no-repeat fixed; 
-  
+
+  background: url("./assets/sea-background.jpg") center / cover no-repeat fixed;
 }
 
 h1 {

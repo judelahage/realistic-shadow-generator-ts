@@ -1,12 +1,14 @@
+/* App.css */
+
+/* Let your App.tsx JSX control layout/padding/maxWidth */
 #root {
-  max-width: 1280px;
   width: 100%;
-  margin: 0 auto;
-  padding: 2rem;
+  margin: 0;
+  padding: 0;
   text-align: left;
 }
 
-
+/* Keep these if you still use them; otherwise you can delete */
 .logo {
   height: 6em;
   padding: 1.5em;

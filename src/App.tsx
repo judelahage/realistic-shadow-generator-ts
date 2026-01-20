@@ -277,176 +277,276 @@ useEffect(() => {
 
 
   return (
-    <div style={{ padding: 20, fontFamily: "Figtree"}}>
-      <h1 style={{ marginTop: 0 }}>Realistic Shadow Generator</h1>
+  <div
+    style={{
+      padding: 20,
+      fontFamily: "Figtree",
+      boxSizing: "border-box",
+      maxWidth: 1400,
+      margin: "0 auto",
+    }}
+  >
+    <h1 style={{ marginTop: 0 }}>Realistic Shadow Generator</h1>
 
-      {/* Upload controls */}
-      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "end" }}>
-        <label style={{ display: "grid", gap: 6 }}>
-          Foreground (PNG cutout preferred)
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => onPickFg(e.target.files?.[0] ?? null)}
-          />
-        </label>
-
-        <label style={{ display: "grid", gap: 6 }}>
-          Background
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => onPickBg(e.target.files?.[0] ?? null)}
-          />
-        </label>
-
-        <label style={{ display: "grid", gap: 6 }}>
-          Depth map (optional)
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => onPickDepth(e.target.files?.[0] ?? null)}
-          />
-        </label>
-      </div>
-
-      {/* light controls (stored only for now) */}
-      <div style={{ marginTop: 14, display: "flex", gap: 16, flexWrap: "wrap" }}>
-        <label style={{ display: "grid", gap: 6, minWidth: 260 }}>
-          Light angle: {light.angle}°
-          <input
-            type="range"
-            min={0}
-            max={360}
-            value={light.angle}
-            onChange={(e) => setLight((s) => ({ ...s, angle: Number(e.target.value) }))}
-          />
-        </label>
-
-        <label style={{ display: "grid", gap: 6, minWidth: 260 }}>
-          Light elevation: {light.elev}°
-          <input
-            type="range"
-            min={0}
-            max={90}
-            value={light.elev}
-            onChange={(e) => setLight((s) => ({ ...s, elev: Number(e.target.value) }))}
-          />
-        </label>
-
-        <div style={{ alignSelf: "end", opacity: 0.7 }}>
-          Depth loaded: {depthSrc ? "yes" : "no"}
-        </div>
-      </div>
-
-      {/* Previews */}
-      <div
-        style={{
-          marginTop: 18,
-          display: "flex",
-          
-          gap: 100,
-          alignItems: "flex-start",
-          flexWrap: "wrap"
-        }}
-      >
-        <div>
-          <h3 style={{ margin: "8px 0" }}>Foreground preview</h3>
-          {fgSrc ? (
-            <div
-              style={{
-                width: 400,
-                height: 400,
-                backgroundColor: "rgba(0,0,0,0.2)",
-                borderRadius: 8,
-                overflow: "hidden",
-              }}
-            >
-              <img
-                src={fgSrc}
-                alt="Foreground preview"
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "contain",
-                  display: "block",
-                }}
-              />
-            </div>
-          ) : (
-            <div style={{opacity: 0.7 }}>
-              Upload a foreground cutout (PNG with transparency is best)
-            </div>
-          )}
-        </div>
-
-        <div>
-          <h3 style={{ margin: "8px 0" }}>Background preview</h3>
-          {bgSrc ? (
-            <div
-              style={{
-                width: 500,
-                height: 500,
-                backgroundColor: "rgba(0,0,0,0.2)",
-                borderRadius: 8,
-                overflow: "hidden",
-              }}
-            >
-              <img
-                src={bgSrc}
-                alt="Background preview"
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "contain",
-                  display: "block",
-                }}
-              />
-            </div>
-          ) : (
-            <div style={{opacity: 0.7 }}>
-              Upload a background image
-            </div>
-          )}
-        </div>
-        <div>
-        <h3 style={{margin:"8px 0"}}>Composite Preview</h3>
-        <canvas
-          ref={canvasRef}
-          style={{height: "500px", display: "block", backgroundColor: "rgba(0,0,0,0.2)"}}
+    {/* Upload controls */}
+    <div
+      style={{
+        display: "flex",
+        gap: 16,
+        flexWrap: "wrap",
+        alignItems: "end",
+      }}
+    >
+      <label style={{ display: "grid", gap: 6 }}>
+        Upload Foreground (PNG cutout preferred)
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => onPickFg(e.target.files?.[0] ?? null)}
         />
-      </div>
-        
-      </div>
-      
-      
+      </label>
 
-      {/* mask preview */}
-      <div
-        style={{
+      <label style={{ display: "grid", gap: 6 }}>
+        Upload Background
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => onPickBg(e.target.files?.[0] ?? null)}
+        />
+      </label>
+
+      <label style={{ display: "grid", gap: 6 }}>
+        Upload Depth map (optional)
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => onPickDepth(e.target.files?.[0] ?? null)}
+        />
+      </label>
+    </div>
+
+    {/* light controls (stored only for now) */}
+    <div
+      style={{
+        marginTop: 14,
+        display: "flex",
+        gap: 16,
+        flexWrap: "wrap",
+        alignItems: "end",
+      }}
+    >
+      <label style={{ display: "grid", gap: 6, minWidth: 260, flex: "1 1 260px" }}>
+        Light angle: {light.angle}°
+        <input
+          type="range"
+          min={0}
+          max={360}
+          value={light.angle}
+          onChange={(e) => setLight((s) => ({ ...s, angle: Number(e.target.value) }))}
+        />
+      </label>
+
+      <label style={{ display: "grid", gap: 6, minWidth: 260, flex: "1 1 260px" }}>
+        Light elevation: {light.elev}°
+        <input
+          type="range"
+          min={0}
+          max={90}
+          value={light.elev}
+          onChange={(e) => setLight((s) => ({ ...s, elev: Number(e.target.value) }))}
+        />
+      </label>
+
+      <div style={{ opacity: 0.7, flex: "0 0 auto" }}>Depth loaded: {depthSrc ? "yes" : "no"}</div>
+    </div>
+
+    {/* Previews */}
+    <div
+      style={{
         marginTop: 18,
         display: "grid",
-        gridTemplateColumns: "1fr 1fr",
-        gap: 16,
+        gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+        gap: 20,
         alignItems: "start",
-        }}
-      >
-        <div>
-          <h3 style={{ margin: "8px 0" }}>mask_debug</h3>
-          <canvas
-            ref={maskRef}
-            style={{ width: "100%", display: "block", backgroundColor: "black" }}
-          />
-        </div>
+      }}
+    >
+      {/* Foreground */}
+      <div style={{ minWidth: 0 }}>
+        <h3 style={{ margin: "8px 0" }}>Foreground preview</h3>
 
-        <div>
-          <h3 style={{ margin: "8px 0" }}>shadow_only (next)</h3>
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 520,
+            aspectRatio: "1 / 1",
+            backgroundColor: "rgba(0,0,0,0.35)",
+            borderRadius: 10,
+            overflow: "hidden",
+            border: "1px solid rgba(255,255,255,0.12)",
+            boxSizing: "border-box",
+          }}
+        >
+          {fgSrc ? (
+            <img
+              src={fgSrc}
+              alt="Foreground preview"
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                display: "block",
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                height: "100%",
+                display: "grid",
+                placeItems: "center",
+                opacity: 0.75,
+                padding: 16,
+                textAlign: "center",
+              }}
+            >
+              
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Background */}
+      <div style={{ minWidth: 0 }}>
+        <h3 style={{ margin: "8px 0" }}>Background preview</h3>
+
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 520,
+            aspectRatio: "1 / 1",
+            backgroundColor: "rgba(0,0,0,0.35)",
+            borderRadius: 10,
+            overflow: "hidden",
+            border: "1px solid rgba(255,255,255,0.12)",
+            boxSizing: "border-box",
+          }}
+        >
+          {bgSrc ? (
+            <img
+              src={bgSrc}
+              alt="Background preview"
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                display: "block",
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                height: "100%",
+                display: "grid",
+                placeItems: "center",
+                opacity: 0.75,
+                padding: 16,
+                textAlign: "center",
+              }}
+            >
+              
+            </div>
+          )}
+        </div>
+      </div>
+
+      
+
+      {/* Composite */}
+      <div style={{ minWidth: 0 }}>
+        <h3 style={{ margin: "8px 0" }}>Composite Preview</h3>
+
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 520,
+            aspectRatio: "1 / 1",
+            backgroundColor: "rgba(0,0,0,0.35)",
+            borderRadius: 10,
+            overflow: "hidden",
+            border: "1px solid rgba(255,255,255,0.12)",
+            boxSizing: "border-box",
+          }}
+        >
           <canvas
-            ref={shadowRef}
-            style={{ width: "700px", display: "block", backgroundColor: "white" }}
+            ref={canvasRef}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
+              display: "block",
+            }}
           />
         </div>
       </div>
     </div>
-  );
+
+    {/* mask preview */}
+    <div
+      style={{
+        marginTop: 18,
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+        gap: 16,
+        alignItems: "start",
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <h3 style={{ margin: "8px 0" }}>mask_debug</h3>
+        <div
+          style={{
+            width: "100%",
+            backgroundColor: "rgba(0,0,0,0.35)",
+            borderRadius: 10,
+            overflow: "hidden",
+            border: "1px solid rgba(255,255,255,0.12)",
+            boxSizing: "border-box",
+          }}
+        >
+          <canvas
+            ref={maskRef}
+            style={{
+              width: "100%",
+              height: 360,
+              display: "block",
+              backgroundColor: "black",
+            }}
+          />
+        </div>
+      </div>
+
+      <div style={{ minWidth: 0 }}>
+        <h3 style={{ margin: "8px 0" }}>shadow_only (next)</h3>
+        <div
+          style={{
+            width: "100%",
+            backgroundColor: "rgba(0,0,0,0.35)",
+            borderRadius: 10,
+            overflow: "hidden",
+            border: "1px solid rgba(255,255,255,0.12)",
+            boxSizing: "border-box",
+          }}
+        >
+          <canvas
+            ref={shadowRef}
+            style={{
+              width: "100%",
+              height: 360,
+              display: "block",
+              backgroundColor: "white",
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  </div>
+);
 }
