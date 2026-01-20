@@ -195,11 +195,71 @@ useEffect(() => {
   //make shadow opacity fall off with distance
   sctx.globalCompositeOperation = "destination-in";
   const fade = sctx.createLinearGradient(0, 0, 0, -fgPlacement.h);
-  fade.addColorStop(0.0, "rgba(0,0,0,1)"); //darker
-  fade.addColorStop(0.35, "rgba(0,0,0,0.35)"); //even darker
-  fade.addColorStop(1.0, "rgba(0, 0, 0, 0)"); //even even darker
+  fade.addColorStop(0.0, "rgba(0,0,0,1)"); //less opacity
+  fade.addColorStop(0.35, "rgba(0,0,0,0.35)"); //even less opacity
+  fade.addColorStop(1.0, "rgba(0, 0, 0, 0)"); //even even less opacity
   sctx.fillStyle = fade;
   sctx.fillRect(0, -fgPlacement.h, fgPlacement.w, fgPlacement.h);
+
+  sctx.save();
+  sctx.translate(fgPlacement.x + dx, fgPlacement.y + fgPlacement.h + dy);
+  sctx.transform(1, 0, shearX, squashY, 0, 0);
+
+  const w = fgPlacement.w;
+  const h = fgPlacement.h;
+  const invTan = 1/Math.tan(elevRad);
+  const blurBoost = Math.max(0.7, Math.min(2.0, invTan));
+
+  function drawLayer(
+    blurPx: number,
+    layerAlpha: number,
+    stops: Array<[number, number]>
+  ) 
+  {
+    if(!sctx) return;
+    sctx.save();
+
+    sctx.filter = 'blur(${Math.round(bluePx * blurBoost)}px)';
+
+    sctx.globalAlpha = layerAlpha;
+
+    sctx.globalCompositeOperation = "source-over";
+    sctx.drawImage(maskCanvas, 0, -h, w, h);
+
+    //tint silhouette to black
+    sctx.globalCompositeOperation = "destination-in";
+    const g = sctx.createLinearGradient(0,0,0, -h);
+    for(const [pos, a] of stops){
+      g.addColorStop(pos, 'rgba(0,0,0,${a})');
+    }
+
+    sctx.fillStyle = g;
+    sctx.fillRect(0, -h, w, h);
+    
+    sctx.restore();
+  }
+
+  //sharpest and strongest shadow nearby
+  drawLayer(0,0.42, [
+    [0.0, 1.0],
+    [0.35,0.35],
+    [1.0,0.0]
+  ]);
+
+  //slightly more blurry medium distance
+  drawLayer(6, 0.22, [
+    [0.0, 0.0],
+    [0.20, 0.35],
+    [0.65, 0.25],
+    [1.0, 0.0],
+  ]);
+
+  // heavy blur, far distances
+  drawLayer(14, 0.16, [
+    [0.0, 0.0],
+    [0.55, 0.25],
+    [1.0, 0.0],
+  ]);
 
   sctx.restore();
 
