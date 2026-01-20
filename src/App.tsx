@@ -500,7 +500,7 @@ useEffect(() => {
       }}
     >
       <div style={{ minWidth: 0 }}>
-        <h3 style={{ margin: "8px 0" }}>mask_debug</h3>
+        <h3 style={{ margin: "8px 0" }}>Mask</h3>
         <div
           style={{
             width: "100%",
@@ -524,7 +524,7 @@ useEffect(() => {
       </div>
 
       <div style={{ minWidth: 0 }}>
-        <h3 style={{ margin: "8px 0" }}>shadow_only (next)</h3>
+        <h3 style={{ margin: "8px 0" }}>Shadow</h3>
         <div
           style={{
             width: "100%",
