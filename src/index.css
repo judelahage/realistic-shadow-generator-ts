@@ -33,7 +33,7 @@ body {
   place-items: center;
   min-width: 320px;
   min-height: 100vh;
-  background: url("/images/sea background.jpg") center / cover no-repeat fixed; 
+  background: url("./assets/sea-background.jpg") center / cover no-repeat fixed; 
   
 }
 
