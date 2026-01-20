@@ -225,7 +225,7 @@ useEffect(() => {
   const blurPx = Math.round(6 * Math.max(0.7, Math.min(2.0, invTan))); // 6..12-ish
 
   sctx.filter = `blur(${blurPx}px)`;                    // blur the silhouette
-  sctx.globalAlpha = 0.22;                              // faint, soft layer
+  sctx.globalAlpha = 0.30;                              // faint, soft layer
 
   sctx.globalCompositeOperation = "source-over";
   sctx.drawImage(maskCanvas, -w / 2, -h, w, h);
@@ -235,7 +235,7 @@ useEffect(() => {
 
   // ---------- 2) sharp layer on top ----------
   sctx.filter = "none";
-  sctx.globalAlpha = 0.55;                              // stronger, sharper layer
+  sctx.globalAlpha = 0.70;                              // stronger, sharper layer
   sctx.globalCompositeOperation = "source-over";
   sctx.drawImage(maskCanvas, -w / 2, -h, w, h);
   sctx.globalCompositeOperation = "source-in";
@@ -277,7 +277,7 @@ useEffect(() => {
 
 
   return (
-    <div style={{ padding: 20, fontFamily: "system-ui, sans-serif" }}>
+    <div style={{ padding: 20, fontFamily: "Figtree"}}>
       <h1 style={{ marginTop: 0 }}>Realistic Shadow Generator</h1>
 
       {/* Upload controls */}
@@ -343,10 +343,10 @@ useEffect(() => {
       <div
         style={{
           marginTop: 18,
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 16,
-          alignItems: "start",
+          display: "flex",
+          
+          gap: 100,
+          alignItems: "left",
         }}
       >
         <div>
@@ -355,43 +355,40 @@ useEffect(() => {
             <img
               src={fgSrc}
               alt="Foreground preview"
-              style={{ width: "100%", border: "1px solid #ccc", display: "block" }}
+              style={{ width: "400px", height: "400px", display: "block" }}
             />
           ) : (
-            <div style={{ border: "1px dashed #999", padding: 16, opacity: 0.7 }}>
+            <div style={{opacity: 0.7 }}>
               Upload a foreground cutout (PNG with transparency is best)
             </div>
           )}
         </div>
-      </div>
+
         <div>
           <h3 style={{ margin: "8px 0" }}>Background preview</h3>
           {bgSrc ? (
             <img
               src={bgSrc}
               alt="Background preview"
-              style={{ width: "100%", border: "1px solid #ccc", display: "block" }}
+              style={{height: "500px", display: "block" }}
             />
           ) : (
-            <div style={{ border: "1px dashed #999", padding: 16, opacity: 0.7 }}>
+            <div style={{opacity: 0.7 }}>
               Upload a background image
             </div>
           )}
         </div>
-
-        
-      
-      <div style = {{ marginTop: 18}}>
+        <div>
         <h3 style={{margin:"8px 0"}}>Composite Preview</h3>
         <canvas
           ref={canvasRef}
-          style={{width:"100%", border: "1px solid #ccc", display: "block"}}
+          style={{height: "500px", display: "block"}}
         />
-
-        <div style = {{marginTop: 6, opacity: 0.7, fontSize: 13}}>
-          This canvas is what the shadow and mask are based on.
-        </div>
       </div>
+        
+      </div>
+      
+      
 
       {/* mask preview */}
       <div
@@ -407,28 +404,18 @@ useEffect(() => {
           <h3 style={{ margin: "8px 0" }}>mask_debug</h3>
           <canvas
             ref={maskRef}
-            style={{ width: "100%", border: "1px solid #ccc", display: "block" }}
+            style={{ width: "100%", display: "block", backgroundColor: "black" }}
           />
-          <div style={{ marginTop: 6, opacity: 0.7, fontSize: 13 }}>
-            White = subject (alpha), Black = transparent.
-          </div>
         </div>
 
         <div>
           <h3 style={{ margin: "8px 0" }}>shadow_only (next)</h3>
           <canvas
             ref={shadowRef}
-            style={{ width: "100%", border: "1px solid #ccc", display: "block" }}
+            style={{ width: "100%", display: "block", backgroundColor: "white" }}
           />
-          <div style={{ marginTop: 6, opacity: 0.7, fontSize: 13 }}>
-            We’ll project the silhouette here next.
-          </div>
         </div>
       </div>
-
-      <p style={{ marginTop: 16, opacity: 0.7 }}>
-        Next: draw a composite preview on a canvas, then generate shadow_only + mask_debug.
-      </p>
     </div>
   );
 }
