@@ -131,10 +131,10 @@ export default function App() {
       // white = opaque (subject), black = transparent
       for (let i = 0; i < d.length; i += 4) {
         const a = d[i + 3];
-        d[i + 0] = a; //setting all color channels to alpha level
-        d[i + 1] = a;
-        d[i + 2] = a;
-        d[i + 3] = 255; //all mask pixels have to be fully opaque so alpha will be set to max
+        d[i + 0] = 255; //setting all pixels to white
+        d[i + 1] = 255;
+        d[i + 2] = 255;
+        d[i + 3] = a; //alpha becomes the silhouette
       }
 
       // show mask at 1:1 pixel size with the drawn FG size
@@ -148,151 +148,139 @@ export default function App() {
     fg.src = fgSrc;
   }, [fgSrc, fgPlacement]);
 
-//shadow effect
+
 useEffect(() => {
   //failsafes
-  if(!bgSrc) return;
+  if (!bgSrc) return;
   if (!fgSrc) return;
   if (!fgPlacement) return;
 
-  //initializing canvases and their correct size
-  const baseCanvas = canvasRef.current; //pull base canvas reference
-  const shadowCanvas = shadowRef.current; //pull shadow canvas reference
-  const maskCanvas = maskRef.current; //pull mask canvas reference
+  //pull canvases
+  const baseCanvas = canvasRef.current;
+  const shadowCanvas = shadowRef.current;
+  const maskCanvas = maskRef.current;
 
-  if(!baseCanvas || !shadowCanvas || !maskCanvas) return;
-  if(maskCanvas.width === 0 || maskCanvas.height === 0) return;
+  if (!baseCanvas || !shadowCanvas || !maskCanvas) return;
+  if (maskCanvas.width === 0 || maskCanvas.height === 0) return;
 
-  const sctx = shadowCanvas.getContext("2d"); //shadow context
-  if(!sctx) return;
+  const sctx = shadowCanvas.getContext("2d");
+  if (!sctx) return;
 
+  //shadow canvas matches base canvas size
   shadowCanvas.width = baseCanvas.width;
   shadowCanvas.height = baseCanvas.height;
 
-  sctx.clearRect(0,0, shadowCanvas.width, shadowCanvas.height);
+  //reset drawing state
+  sctx.clearRect(0, 0, shadowCanvas.width, shadowCanvas.height);
+  sctx.setTransform(1, 0, 0, 1, 0, 0);
+  sctx.globalAlpha = 1;
+  sctx.filter = "none";
+  sctx.globalCompositeOperation = "source-over";
 
-  const rad = (light.angle * Math.PI) / 180; //light angle in radians
-  const dirX = Math.cos(rad); //unit direction vector of the light, multiply by length to get shadow offsets
-  const dirY = Math.sin(rad); 
-  const elevClamped = Math.max(1, Math.min(89,light.elev));
+  //light direction (in canvas coords: +x right, +y down)
+  const rad = (light.angle * Math.PI) / 180;
+  const lightX = Math.cos(rad);
+  const lightY = -Math.sin(rad);
+
+  //shadow goes opposite the light
+  const shadowX = -lightX;
+  const shadowY = -lightY;
+
+  //elevation -> longer shadow when elevation is low
+  const elevClamped = Math.max(1, Math.min(89, light.elev));
   const elevRad = (elevClamped * Math.PI) / 180;
-  const length = (1 / Math.tan(elevRad)) * fgPlacement.h; //big angle means short shadow, small angle means long shadow so inverse tan relationship here
 
-  const dx = Math.round(dirX * length * 0.25);
-  const dy = Math.round(dirY * length * 0.25);
-  const squashY = Math.max(0.15, Math.min(0.6, 0.15 + 0.45 * (1 / Math.tan(elevRad)) / 3)); //make shadow flatten more when its long and less when its short
-  const shearX = dirX * 0.9; //skew to simulate direction
+  //optional tiny bias so shadow isn't glued perfectly at the contact
+  const bias = fgPlacement.h * 0.02;
+  const dx = Math.round(shadowX * bias);
+  const dy = Math.round(shadowY * bias);
 
-  sctx.save();
-  sctx.globalAlpha = 0.45; //making the entire shadow have the same opacity, eventually will change
-  sctx.translate(fgPlacement.x + dx, fgPlacement.y + fgPlacement.h + dy); //anchoring the shadow at the object's bottom left corner
-  sctx.transform(1, 0, shearX, squashY, 0, 0);
-  sctx.drawImage(maskCanvas, 0, -fgPlacement.h, fgPlacement.w, fgPlacement.h);
-  sctx.globalCompositeOperation = "source-in";
-  sctx.fillStyle = "black";
-  sctx.fillRect(0, -fgPlacement.h, fgPlacement.w, fgPlacement.h);
-  
-  //make shadow opacity fall off with distance
-  sctx.globalCompositeOperation = "destination-in";
-  const fade = sctx.createLinearGradient(0, 0, 0, -fgPlacement.h);
-  fade.addColorStop(0.0, "rgba(0,0,0,1)"); //less opacity
-  fade.addColorStop(0.35, "rgba(0,0,0,0.35)"); //even less opacity
-  fade.addColorStop(1.0, "rgba(0, 0, 0, 0)"); //even even less opacity
-  sctx.fillStyle = fade;
-  sctx.fillRect(0, -fgPlacement.h, fgPlacement.w, fgPlacement.h);
+  //projection factor
+  const k = 1 / Math.tan(elevRad);
 
-  sctx.save();
-  sctx.translate(fgPlacement.x + dx, fgPlacement.y + fgPlacement.h + dy);
-  sctx.transform(1, 0, shearX, squashY, 0, 0);
+  //direction of the shadow (angle in canvas coords)
+  const theta = Math.atan2(shadowY, shadowX);
 
+  //flattening constant for the debug pass (we’ll tune later)
+  const squashY = 0.25;
+
+  //anchor at bottom-center of subject
   const w = fgPlacement.w;
   const h = fgPlacement.h;
-  const invTan = 1/Math.tan(elevRad);
-  const blurBoost = Math.max(0.7, Math.min(2.0, invTan));
 
-  function drawLayer(
-    blurPx: number,
-    layerAlpha: number,
-    stops: Array<[number, number]>
-  ) 
-  {
-    if(!sctx) return;
-    sctx.save();
+  sctx.save();
 
-    sctx.filter = 'blur(${Math.round(bluePx * blurBoost)}px)';
+  //move origin to the contact point under the subject
+  sctx.translate(
+    fgPlacement.x + w / 2 + dx,
+    fgPlacement.y + h + dy
+  );
 
-    sctx.globalAlpha = layerAlpha;
+  //rotate so shadow direction points to +x
+  sctx.rotate(theta);
 
-    sctx.globalCompositeOperation = "source-over";
-    sctx.drawImage(maskCanvas, 0, -h, w, h);
+  //project onto the "ground":
+  // x' = x + (-k)*y   (shear x by y to create length)
+  // y' = squashY*y    (flatten vertically)
+  sctx.transform(1, 0, -k, squashY, 0, 0);
 
-    //tint silhouette to black
-    sctx.globalCompositeOperation = "destination-in";
-    const g = sctx.createLinearGradient(0,0,0, -h);
-    for(const [pos, a] of stops){
-      g.addColorStop(pos, 'rgba(0,0,0,${a})');
-    }
+  // ===== DEBUG: solid projected silhouette (no blur, no gradients) =====
 
-    sctx.fillStyle = g;
-    sctx.fillRect(0, -h, w, h);
-    
-    sctx.restore();
-  }
+  // ---------- 1) blurred layer underneath ----------
+  const invTan = 1 / Math.tan(elevRad);                 // lower elevation => bigger number
+  const blurPx = Math.round(6 * Math.max(0.7, Math.min(2.0, invTan))); // 6..12-ish
 
-  //sharpest and strongest shadow nearby
-  drawLayer(0,0.42, [
-    [0.0, 1.0],
-    [0.35,0.35],
-    [1.0,0.0]
-  ]);
+  sctx.filter = `blur(${blurPx}px)`;                    // blur the silhouette
+  sctx.globalAlpha = 0.22;                              // faint, soft layer
 
-  //slightly more blurry medium distance
-  drawLayer(6, 0.22, [
-    [0.0, 0.0],
-    [0.20, 0.35],
-    [0.65, 0.25],
-    [1.0, 0.0],
-  ]);
+  sctx.globalCompositeOperation = "source-over";
+  sctx.drawImage(maskCanvas, -w / 2, -h, w, h);
+  sctx.globalCompositeOperation = "source-in";
+  sctx.fillStyle = "black";
+  sctx.fillRect(-w / 2, -h, w, h);
 
-  // heavy blur, far distances
-  drawLayer(14, 0.16, [
-    [0.0, 0.0],
-    [0.55, 0.25],
-    [1.0, 0.0],
-  ]);
+  // ---------- 2) sharp layer on top ----------
+  sctx.filter = "none";
+  sctx.globalAlpha = 0.55;                              // stronger, sharper layer
+  sctx.globalCompositeOperation = "source-over";
+  sctx.drawImage(maskCanvas, -w / 2, -h, w, h);
+  sctx.globalCompositeOperation = "source-in";
+  sctx.fillStyle = "black";
+  sctx.fillRect(-w / 2, -h, w, h);
 
+  // ---------- 3) fade both layers together ----------
+  sctx.filter = "none";
+  sctx.globalAlpha = 1;
+  sctx.globalCompositeOperation = "destination-in";
+
+  const fade = sctx.createLinearGradient(0, -h, 0, 0);
+  fade.addColorStop(0.0, "rgba(0,0,0,0.0)");
+  fade.addColorStop(0.6, "rgba(0,0,0,0.6)");
+  fade.addColorStop(1.0, "rgba(0,0,0,1.0)");
+
+  sctx.fillStyle = fade;
+  sctx.fillRect(-w / 2, -h, w, h);
+
+  // reset
+  sctx.globalCompositeOperation = "source-over";
+  sctx.globalAlpha = 1;
+  sctx.filter = "none";
+
+
+  //restore and STOP here for debugging
   sctx.restore();
 
-  //contact shadow pass
-  {
-    const contactStripPx = Math.max(6, Math.round(fgPlacement.h * 0.04)); //shadow thickness at feet
 
-    const contactAlpha = 0.55 + 0.25 * (1 / Math.tan(elevRad)) / 3; //darker shadow at contact point at feet
-    const contactAlphaClamped = Math.max(0.45, Math.min(0.85, contactAlpha));
-
-    sctx.save();
-    sctx.globalAlpha = contactAlphaClamped; //set the darker shadow with increased alpha to the contact points
-
-    sctx.translate(fgPlacement.x + dx, fgPlacement.y + fgPlacement.h + dy); //align contact shadow with main shadow direction
-    sctx.transform(1, 0, shearX, squashY, 0, 0);
-
-    // Draw only the bottom strip of the silhouette
-    sctx.drawImage(
-      maskCanvas,
-      0, fgPlacement.h - contactStripPx,
-      fgPlacement.w, contactStripPx,
-      0, -contactStripPx,
-      fgPlacement.w, contactStripPx
-    );
-
-    sctx.globalCompositeOperation = "source-in";
-    sctx.fillStyle = "black";
-    sctx.fillRect(0, -contactStripPx, fgPlacement.w, contactStripPx);
-
-    sctx.restore();
-  }
-
+  // --------------------------------------------------------------------
+  // Everything below is intentionally disabled for now.
+  // Once the debug silhouette looks correct, we’ll re-enable:
+  // - layered blur falloff
+  // - distance fade
+  // - contact shadow strip
+  // --------------------------------------------------------------------
 }, [bgSrc, fgSrc, fgPlacement, light, maskVersion]);
+
+
 
   return (
     <div style={{ padding: 20, fontFamily: "system-ui, sans-serif" }}>
