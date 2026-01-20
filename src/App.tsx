@@ -191,7 +191,16 @@ useEffect(() => {
   sctx.globalCompositeOperation = "source-in";
   sctx.fillStyle = "black";
   sctx.fillRect(0, -fgPlacement.h, fgPlacement.w, fgPlacement.h);
-    
+  
+  //make shadow opacity fall off with distance
+  sctx.globalCompositeOperation = "destination-in";
+  const fade = sctx.createLinearGradient(0, 0, 0, -fgPlacement.h);
+  fade.addColorStop(0.0, "rgba(0,0,0,1)"); //darker
+  fade.addColorStop(0.35, "rgba(0,0,0,0.35)"); //even darker
+  fade.addColorStop(1.0, "rgba(0, 0, 0, 0)"); //even even darker
+  sctx.fillStyle = fade;
+  sctx.fillRect(0, -fgPlacement.h, fgPlacement.w, fgPlacement.h);
+
   sctx.restore();
 
   //contact shadow pass
