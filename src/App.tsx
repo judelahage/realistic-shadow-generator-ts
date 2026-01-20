@@ -350,21 +350,6 @@ useEffect(() => {
         }}
       >
         <div>
-          <h3 style={{ margin: "8px 0" }}>Background preview</h3>
-          {bgSrc ? (
-            <img
-              src={bgSrc}
-              alt="Background preview"
-              style={{ width: "100%", border: "1px solid #ccc", display: "block" }}
-            />
-          ) : (
-            <div style={{ border: "1px dashed #999", padding: 16, opacity: 0.7 }}>
-              Upload a background image
-            </div>
-          )}
-        </div>
-
-        <div>
           <h3 style={{ margin: "8px 0" }}>Foreground preview</h3>
           {fgSrc ? (
             <img
@@ -379,6 +364,22 @@ useEffect(() => {
           )}
         </div>
       </div>
+        <div>
+          <h3 style={{ margin: "8px 0" }}>Background preview</h3>
+          {bgSrc ? (
+            <img
+              src={bgSrc}
+              alt="Background preview"
+              style={{ width: "100%", border: "1px solid #ccc", display: "block" }}
+            />
+          ) : (
+            <div style={{ border: "1px dashed #999", padding: 16, opacity: 0.7 }}>
+              Upload a background image
+            </div>
+          )}
+        </div>
+
+        
       
       <div style = {{ marginTop: 18}}>
         <h3 style={{margin:"8px 0"}}>Composite Preview</h3>
