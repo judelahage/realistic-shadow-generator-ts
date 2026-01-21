@@ -14,7 +14,6 @@ function readFileAsDataURL(file: File): Promise<string> { //read files into deco
 export default function App() {
   const [fgSrc, setFgSrc] = useState<string | null>(null);
   const [bgSrc, setBgSrc] = useState<string | null>(null);
-  const [depthSrc, setDepthSrc] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null); //reference for composite canvas DOM element
   const maskRef = useRef<HTMLCanvasElement | null>(null); //reference for mask canvas DOM element
