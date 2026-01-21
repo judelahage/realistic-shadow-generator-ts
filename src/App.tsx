@@ -47,14 +47,6 @@ export default function App() {
     setBgSrc(await readFileAsDataURL(file));
   }
 
-  async function onPickDepth(file: File | null) {
-    if (!file) {
-      setDepthSrc(null);
-      return;
-    }
-    setDepthSrc(await readFileAsDataURL(file));
-  }
-
   // Draw composite: BG -> Shadow -> FG
   useEffect(() => {
     if (!bgSrc) return;
@@ -285,15 +277,6 @@ export default function App() {
             type="file"
             accept="image/*"
             onChange={(e) => onPickBg(e.target.files?.[0] ?? null)}
-          />
-        </label>
-
-        <label style={{ display: "grid", gap: 6 }}>
-          Upload Depth map (optional)
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => onPickDepth(e.target.files?.[0] ?? null)}
           />
         </label>
       </div>
