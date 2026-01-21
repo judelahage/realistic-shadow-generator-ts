@@ -326,7 +326,7 @@ export default function App() {
     const blurPx = Math.round(6 * Math.max(0.7, Math.min(2.0, invTan)));
 
     sctx.filter = `blur(${blurPx}px)`;
-    sctx.globalAlpha = 0.30;
+    sctx.globalAlpha = 0.45;
 
     sctx.globalCompositeOperation = "source-over";
     sctx.drawImage(maskCanvas, -w / 2, -h, w, h);
@@ -336,7 +336,7 @@ export default function App() {
 
     //sharp layer above it
     sctx.filter = "none";
-    sctx.globalAlpha = 0.70;
+    sctx.globalAlpha = 0.90;
 
     sctx.globalCompositeOperation = "source-over";
     sctx.drawImage(maskCanvas, -w / 2, -h, w, h);
