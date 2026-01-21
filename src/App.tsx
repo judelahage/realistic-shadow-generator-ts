@@ -135,6 +135,7 @@ export default function App() {
       canvas.height = bg.naturalHeight;
 
       // Compute placement once
+      //scale only happens if foreground is bigger than background
       const scale = Math.min(
         1,
         (canvas.width) / fg.naturalWidth,
