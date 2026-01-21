@@ -32,18 +32,14 @@ export default function App() {
   
   //file imports
   async function onPickFg(file: File | null) {
-    if (!file) {
-      setFgSrc(null);
-      return;
-    }
+    if (!file) { setFgSrc(null); setFgPlacement(null); return; }
+    setFgPlacement(null);
     setFgSrc(await readFileAsDataURL(file));
   }
 
   async function onPickBg(file: File | null) {
-    if (!file) {
-      setBgSrc(null);
-      return;
-    }
+    if (!file) { setBgSrc(null); setFgPlacement(null); return; }
+    setFgPlacement(null);
     setBgSrc(await readFileAsDataURL(file));
   }
   
@@ -138,7 +134,6 @@ export default function App() {
         const x = Math.round((canvas.width - w) / 2);
         const y = Math.round(canvas.height - h);
 
-        setFgPlacement({ x, y, w, h });
         ctx.drawImage(fg, x, y, w, h); //3 draw the foreground
       };
       fg.src = fgSrc;
@@ -147,7 +142,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };  
-  }, [bgSrc, fgSrc, light, shadowVersion]);
+  }, [bgSrc, fgSrc, fgPlacement, shadowVersion]);
 
   // Build mask from FG alpha
   useEffect(() => {
