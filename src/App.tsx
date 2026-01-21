@@ -23,6 +23,7 @@ export default function App() {
   const [light, setLight] = useState<Light>({ angle: 180, elev: 55 }); //default starting light parameters so shadow can be visible on image load
   const [maskVersion, setMaskVersion] = useState(0);
 
+  const [shadowVersion, setShadowVersion] = useState(0);
   const [fgPlacement, setFgPlacement] = useState<{
     x: number;
     y: number;
@@ -46,7 +47,60 @@ export default function App() {
     }
     setBgSrc(await readFileAsDataURL(file));
   }
+  
+  async function onPickDepth(file: File | null) {
+    if (!file) {
+      setDepthSrc(null);
+      return;
+    }
+    setDepthSrc(await readFileAsDataURL(file));
+  }
+  //only compute fgPlacement when bg and fg change
+  useEffect(() => {
+    if (!bgSrc || !fgSrc) return;
 
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    let cancelled = false;
+
+    const bg = new Image();
+    const fg = new Image();
+
+    const tryCompute = () => {
+      if (cancelled) return;
+      if (!bg.complete || !fg.complete) return;
+      if (bg.naturalWidth === 0 || fg.naturalWidth === 0) return;
+
+      // Set composite canvas size from background
+      canvas.width = bg.naturalWidth;
+      canvas.height = bg.naturalHeight;
+
+      // Compute placement once
+      const scale = Math.min(
+        (canvas.width * 0.6) / fg.naturalWidth,
+        (canvas.height * 0.8) / fg.naturalHeight
+      );
+
+      const w = Math.round(fg.naturalWidth * scale);
+      const h = Math.round(fg.naturalHeight * scale);
+      const x = Math.round((canvas.width - w) / 2);
+      const y = Math.round(canvas.height - h);
+
+      setFgPlacement({ x, y, w, h });
+    };
+
+    bg.onload = tryCompute;
+    fg.onload = tryCompute;
+
+    bg.src = bgSrc;
+    fg.src = fgSrc;
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bgSrc, fgSrc]);
+  
   // Draw composite: BG -> Shadow -> FG
   useEffect(() => {
     if (!bgSrc) return;
@@ -54,11 +108,16 @@ export default function App() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    let cancelled = false;
 
     const bg = new Image();
     bg.onload = () => {
-      canvas.width = bg.naturalWidth;
-      canvas.height = bg.naturalHeight;
+      if(cancelled) return;
+      
+      if (canvas.width !== bg.naturalWidth || canvas.height !== bg.naturalHeight) {
+        canvas.width = bg.naturalWidth;
+        canvas.height = bg.naturalHeight;
+      }
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(bg, 0, 0); //draw the background
@@ -72,9 +131,11 @@ export default function App() {
         ctx.drawImage(shadowCanvas, 0, 0); //2 draw the shadow
       }
 
-      if (!fgSrc) return;
+      if (!fgSrc || !fgPlacement) return;
+      
       const fg = new Image();
       fg.onload = () => {
+        if(cancelled) return;
         const scale = Math.min(
           (canvas.width * 0.6) / fg.naturalWidth,
           (canvas.height * 0.8) / fg.naturalHeight
@@ -91,6 +152,8 @@ export default function App() {
       fg.src = fgSrc;
     };
     bg.src = bgSrc;
+    return () => {
+      cancelled = true;
   }, [bgSrc, fgSrc, light]);
 
   // Build mask from FG alpha
