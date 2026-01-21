@@ -15,10 +15,12 @@ export default function App() {
   const [fgSrc, setFgSrc] = useState<string | null>(null);
   const [bgSrc, setBgSrc] = useState<string | null>(null);
   const [depthSrc, setDepthSrc] = useState<string | null>(null);
+  
   const canvasRef = useRef<HTMLCanvasElement | null>(null); //reference for composite canvas DOM element
   const maskRef = useRef<HTMLCanvasElement | null>(null); //reference for mask canvas DOM element
   const shadowRef = useRef<HTMLCanvasElement | null>(null); //reference for shadow canvas DOM element
-
+  const depthCanvasRef = useRef<HTMLCanvasElement | null>(null); //reference for depth canvas DOM element
+  
   const [light, setLight] = useState<Light>({ angle: 180, elev: 55 }); //default starting light parameters so shadow can be visible on image load
   const [maskVersion, setMaskVersion] = useState(0);
 
@@ -29,6 +31,12 @@ export default function App() {
     w: number;
     h: number;
   } | null>(null);
+
+  const [depthBuf, setDepthBuf] = useState<Float32Array | null>(null);
+  const [depthW, setDepthW] = useState(0);
+  const [depthH, setDepthH] = useState(0);
+  const [depthVersion, setDepthVersion] = useState(0);
+  
   
   //file imports
   async function onPickFg(file: File | null) {
@@ -119,6 +127,15 @@ export default function App() {
     downloadBlob(blob, filename);
   }
 
+  function loadImage(src: string): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+  }
+  
   //only compute fgPlacement when bg and fg change
   useEffect(() => {
     if (!bgSrc || !fgSrc) return;
@@ -372,6 +389,70 @@ export default function App() {
     setShadowVersion((v) => v + 1);
   }, [bgSrc, fgSrc, fgPlacement, light, maskVersion]);
 
+  useEffect(() => {
+    let cancelled = false;
+    async function buildDepth() {
+      if(!depthSrc || !fgPlacement) {
+        setDepthBuf(null);
+        setDepthW(0);
+        setDepthH(0);
+        setDepthVersion((v) => v + 1);
+        return;
+      }
+      const w = Math.max(1, Math.round(fgPlacement.w));
+      const h = Math.max(1, Math.round(fgPlacement.h));
+  
+      //sample pixels in canvas
+      let c = deptchCanvasRef.current;
+      if(!c){
+        c = document.createElement("canvas");
+        depthCanvasRef.current = c;      
+      }
+      c.width = w;
+      c.height = h;
+  
+      const ctx = c.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return;
+  
+      // Load depth image and draw it scaled to match fgPlacement size
+      const img = await loadImage(depthSrc);
+      if (cancelled) return;
+  
+      ctx.clearRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+  
+      const id = ctx.getImageData(0, 0, w, h);
+      const data = id.data;
+  
+      const buf = new Float32Array(w * h);
+  
+      // Convert RGB -> depth in [0..1]
+      // Assumption: bright = closer (bigger depth value)
+      // We'll store depth01 = brightness (0..1).
+      for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        // average brightness
+        const brightness = (r + g + b) / (3 * 255);
+        buf[p] = brightness; // 0..1
+      }
+  
+      if (cancelled) return;
+  
+      setDepthBuf(buf);
+      setDepthW(w);
+      setDepthH(h);
+      setDepthVersion((v) => v + 1);
+    }
+  
+    buildDepth();
+  
+    return () => {
+      cancelled = true;
+    };
+  }, [depthSrc, fgPlacement]);
+
   return (
     <div
       style={{
@@ -422,6 +503,7 @@ export default function App() {
 
         <div style={{ opacity: 0.8, fontSize: 12, marginTop: 6 }}>
           Depth loaded: {depthSrc ? "yes" : "no"}
+          {depthBuf ? `${depthW}x${depthH}` : "none"}
         </div>
 
       </div>
