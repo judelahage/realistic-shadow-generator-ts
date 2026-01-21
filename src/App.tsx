@@ -20,7 +20,7 @@ export default function App() {
   const maskRef = useRef<HTMLCanvasElement | null>(null); //reference for mask canvas DOM element
   const shadowRef = useRef<HTMLCanvasElement | null>(null); //reference for shadow canvas DOM element
 
-  const [light, setLight] = useState<Light>({ angle: 90, elev: 45 }); //default starting light parameters so shadow can be visible on image load
+  const [light, setLight] = useState<Light>({ angle: 180, elev: 55 }); //default starting light parameters so shadow can be visible on image load
   const [maskVersion, setMaskVersion] = useState(0);
 
   const [fgPlacement, setFgPlacement] = useState<{
