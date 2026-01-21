@@ -14,7 +14,7 @@ function readFileAsDataURL(file: File): Promise<string> { //read files into deco
 export default function App() {
   const [fgSrc, setFgSrc] = useState<string | null>(null);
   const [bgSrc, setBgSrc] = useState<string | null>(null);
-
+  const [depthSrc, setDepthSrc] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null); //reference for composite canvas DOM element
   const maskRef = useRef<HTMLCanvasElement | null>(null); //reference for mask canvas DOM element
   const shadowRef = useRef<HTMLCanvasElement | null>(null); //reference for shadow canvas DOM element
@@ -42,6 +42,12 @@ export default function App() {
     setFgPlacement(null);
     setBgSrc(await readFileAsDataURL(file));
   }
+
+  async function onPickDepth(file: File | null) {
+    if (!file) { setDepthSrc(null); return; }
+    setDepthSrc(await readFileAsDataURL(file));
+  }
+
 
   //file exports
   function makeStamp() {
@@ -404,6 +410,20 @@ export default function App() {
             onChange={(e) => onPickBg(e.target.files?.[0] ?? null)}
           />
         </label>
+
+        <label style={{ display: "grid", gap: 6 }}>
+        Upload Depth Map (aligned to foreground)
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => onPickDepth(e.target.files?.[0] ?? null)}
+          />
+        </label>
+
+        <div style={{ opacity: 0.8, fontSize: 12, marginTop: 6 }}>
+          Depth loaded: {depthSrc ? "yes" : "no"}
+        </div>
+
       </div>
 
       {/* light controls */}
