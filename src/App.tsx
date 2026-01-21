@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 type Light = { angle: number; elev: number };
 
-function readFileAsDataURL(file: File): Promise<string> {
+function readFileAsDataURL(file: File): Promise<string> { //read files into decodable urls
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
@@ -16,11 +16,11 @@ export default function App() {
   const [bgSrc, setBgSrc] = useState<string | null>(null);
   const [depthSrc, setDepthSrc] = useState<string | null>(null);
 
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const maskRef = useRef<HTMLCanvasElement | null>(null);
-  const shadowRef = useRef<HTMLCanvasElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null); //reference for composite canvas DOM element
+  const maskRef = useRef<HTMLCanvasElement | null>(null); //reference for mask canvas DOM element
+  const shadowRef = useRef<HTMLCanvasElement | null>(null); //reference for shadow canvas DOM element
 
-  const [light, setLight] = useState<Light>({ angle: 45, elev: 35 });
+  const [light, setLight] = useState<Light>({ angle: 90, elev: 45 }); //default starting light parameters so shadow can be visible on image load
   const [maskVersion, setMaskVersion] = useState(0);
 
   const [fgPlacement, setFgPlacement] = useState<{
@@ -29,7 +29,8 @@ export default function App() {
     w: number;
     h: number;
   } | null>(null);
-
+  
+  //file imports
   async function onPickFg(file: File | null) {
     if (!file) {
       setFgSrc(null);
@@ -54,7 +55,7 @@ export default function App() {
     setDepthSrc(await readFileAsDataURL(file));
   }
 
-  // Draw composite: BG -> Shadow (from shadow canvas) -> FG
+  // Draw composite: BG -> Shadow -> FG
   useEffect(() => {
     if (!bgSrc) return;
     const canvas = canvasRef.current;
@@ -68,7 +69,7 @@ export default function App() {
       canvas.height = bg.naturalHeight;
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(bg, 0, 0);
+      ctx.drawImage(bg, 0, 0); //draw the background
 
       const shadowCanvas = shadowRef.current;
       if (
@@ -76,7 +77,7 @@ export default function App() {
         shadowCanvas.width > 0 &&
         shadowCanvas.height > 0
       ) {
-        ctx.drawImage(shadowCanvas, 0, 0);
+        ctx.drawImage(shadowCanvas, 0, 0); //2 draw the shadow
       }
 
       if (!fgSrc) return;
@@ -93,12 +94,12 @@ export default function App() {
         const y = Math.round(canvas.height - h);
 
         setFgPlacement({ x, y, w, h });
-        ctx.drawImage(fg, x, y, w, h);
+        ctx.drawImage(fg, x, y, w, h); //3 draw the foreground
       };
       fg.src = fgSrc;
     };
     bg.src = bgSrc;
-  }, [bgSrc, fgSrc, light]); // (keeping as-is so UI updates feel immediate)
+  }, [bgSrc, fgSrc, light]);
 
   // Build mask from FG alpha
   useEffect(() => {
@@ -128,7 +129,7 @@ export default function App() {
 
       for (let i = 0; i < d.length; i += 4) {
         const a = d[i + 3];
-        d[i + 0] = 255;
+        d[i + 0] = 255; //make every channel white except the alpha channel which is 4th channel
         d[i + 1] = 255;
         d[i + 2] = 255;
         d[i + 3] = a;
@@ -171,26 +172,18 @@ export default function App() {
     const w = fgPlacement.w;
     const h = fgPlacement.h;
 
-    // --- LIGHT ANGLE FIX ---
-    // In your old code, angle only affected a small translate (dx/dy),
-    // so the shadow "orbited" in a circle.
-    // Now: angle affects the actual projection direction via the transform matrix.
-
-    // Canvas coords: +x right, +y down.
-    // Define light angle as: 0° = light from right, 90° = light from above (because of -sin usage).
+    // 0° = light from right, 90° = light from above
     const rad = (light.angle * Math.PI) / 180;
 
     // Shadow direction is opposite the light direction
     const dirX = -Math.cos(rad);
     const dirY = Math.sin(rad);
 
-    // Elevation -> longer shadows when elevation is low
+    // longer shadows when elevation is low
     const elevClamped = Math.max(1, Math.min(89, light.elev));
     const elevRad = (elevClamped * Math.PI) / 180;
     const k = 1 / Math.tan(elevRad);
 
-    // "Squash" keeps the shadow from collapsing into a 1D line.
-    // This component is perpendicular to the main shadow direction.
     const squash = 0.7;
     const perpX = -dirY;
     const perpY = dirX;
@@ -212,7 +205,7 @@ export default function App() {
     // Here: a=1, b=0 (no "orbit", no rotation of the original x axis)
     sctx.transform(1, 0, c, d, 0, 0);
 
-    // ---------- 1) blurred layer underneath ----------
+    //blurred layer underneath
     const invTan = 1 / Math.tan(elevRad);
     const blurPx = Math.round(6 * Math.max(0.7, Math.min(2.0, invTan)));
 
@@ -225,7 +218,7 @@ export default function App() {
     sctx.fillStyle = "black";
     sctx.fillRect(-w / 2, -h, w, h);
 
-    // ---------- 2) sharp layer on top ----------
+    //sharp layer above it
     sctx.filter = "none";
     sctx.globalAlpha = 0.70;
 
@@ -235,13 +228,11 @@ export default function App() {
     sctx.fillStyle = "black";
     sctx.fillRect(-w / 2, -h, w, h);
 
-    // ---------- 3) fade both layers together ----------
+    //fade layers together
     sctx.filter = "none";
     sctx.globalAlpha = 1;
     sctx.globalCompositeOperation = "destination-in";
 
-    // Gradient is defined in the current transformed space,
-    // so it naturally fades along the projected direction.
     const fade = sctx.createLinearGradient(0, -h, 0, 0);
     fade.addColorStop(0.0, "rgba(0,0,0,0.0)");
     fade.addColorStop(0.6, "rgba(0,0,0,0.6)");
