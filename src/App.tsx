@@ -135,14 +135,14 @@ export default function App() {
       canvas.height = bg.naturalHeight;
 
       // Compute placement once
-      const scale = Math.min(
+      /*const scale = Math.min(
         1,
         (canvas.width) / fg.naturalWidth,
         (canvas.height) / fg.naturalHeight
       );
-
-      const w = Math.round(fg.naturalWidth * scale);
-      const h = Math.round(fg.naturalHeight * scale);
+      */
+      const w = Math.round(fg.naturalWidth);
+      const h = Math.round(fg.naturalHeight);
       const x = Math.round((canvas.width - w) / 2);
       const y = Math.round(canvas.height - h);
 
