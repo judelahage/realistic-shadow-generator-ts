@@ -196,8 +196,9 @@ export default function App() {
       fg.onload = () => {
         if(cancelled) return;
         const scale = Math.min(
-          (canvas.width * 0.6) / fg.naturalWidth,
-          (canvas.height * 0.8) / fg.naturalHeight
+          1,
+          (canvas.width) / fg.naturalWidth,
+          (canvas.height) / fg.naturalHeight
         );
 
         const w = Math.round(fg.naturalWidth * scale);
