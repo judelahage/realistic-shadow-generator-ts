@@ -48,13 +48,6 @@ export default function App() {
     setBgSrc(await readFileAsDataURL(file));
   }
   
-  async function onPickDepth(file: File | null) {
-    if (!file) {
-      setDepthSrc(null);
-      return;
-    }
-    setDepthSrc(await readFileAsDataURL(file));
-  }
   //only compute fgPlacement when bg and fg change
   useEffect(() => {
     if (!bgSrc || !fgSrc) return;
@@ -155,7 +148,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };  
-  }, [bgSrc, fgSrc, light]);
+  }, [bgSrc, fgSrc, light, shadowVersion]);
 
   // Build mask from FG alpha
   useEffect(() => {
@@ -303,6 +296,7 @@ export default function App() {
     sctx.filter = "none";
 
     sctx.restore();
+    setShadowVersion((v) => v + 1);
   }, [bgSrc, fgSrc, fgPlacement, light, maskVersion]);
 
   return (
