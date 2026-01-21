@@ -8,6 +8,7 @@ A small web app that generates more realistic drop shadows for a cutout (foregro
 - Optional **depth map** input (if supported in your build)
 - Light controls (angle + elevation)
 - Multiple preview outputs (foreground, background, composite, debug views)
+- Currently working on adding depth map funcitonality
 
 ## Tech Stack
 - React + TypeScript
