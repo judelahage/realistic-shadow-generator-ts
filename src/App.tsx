@@ -154,6 +154,7 @@ export default function App() {
     bg.src = bgSrc;
     return () => {
       cancelled = true;
+    };  
   }, [bgSrc, fgSrc, light]);
 
   // Build mask from FG alpha
