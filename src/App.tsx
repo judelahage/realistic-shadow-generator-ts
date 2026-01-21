@@ -130,6 +130,7 @@ export default function App() {
   function loadImage(src: string): Promise<HTMLImageElement> {
     return new Promise((resolve, reject) => {
       const img = new Image();
+      img.crossOrigin = "anonymous";
       img.onload = () => resolve(img);
       img.onerror = reject;
       img.src = src;
@@ -403,7 +404,7 @@ export default function App() {
       const h = Math.max(1, Math.round(fgPlacement.h));
   
       //sample pixels in canvas
-      let c = deptchCanvasRef.current;
+      let c = depthCanvasRef.current;
       if(!c){
         c = document.createElement("canvas");
         depthCanvasRef.current = c;      
@@ -502,7 +503,7 @@ export default function App() {
         </label>
 
         <div style={{ opacity: 0.8, fontSize: 12, marginTop: 6 }}>
-          Depth loaded: {depthSrc ? "yes" : "no"}
+          Depth loaded: {depthSrc ? "yes" : "no"} • Buffer:{" "}
           {depthBuf ? `${depthW}x${depthH}` : "none"}
         </div>
 
