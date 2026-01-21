@@ -42,7 +42,77 @@ export default function App() {
     setFgPlacement(null);
     setBgSrc(await readFileAsDataURL(file));
   }
+
+  //file exports
+  function makeStamp() {
+    const d = new Date();
+    // 2026-01-21_13-05-09
+    return d.toISOString().replace("T", "_").replaceAll(":", "-").slice(0, 19);
+  }
   
+  async function onExportComposite() {
+    await exportCanvas(canvasRef.current, `composite_${makeStamp()}.png`);
+  }
+  
+  async function onExportShadow() {
+    await exportCanvas(shadowRef.current, `shadow_${makeStamp()}.png`);
+  }
+  
+  async function onExportMask() {
+    await exportCanvas(maskRef.current, `mask_${makeStamp()}.png`);
+  }
+  
+  // optional: export the original uploaded images (not the rendered canvases)
+  async function onExportForegroundOriginal() {
+    await exportDataUrl(fgSrc, `foreground_original_${makeStamp()}.png`);
+  }
+  
+  async function onExportBackgroundOriginal() {
+    await exportDataUrl(bgSrc, `background_original_${makeStamp()}.png`);
+  }
+
+  function downloadBlob(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function canvasToBlob(
+    canvas: HTMLCanvasElement,
+    mime: string = "image/png",
+    quality?: number
+  ): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error("canvas.toBlob() failed"))),
+        mime,
+        quality
+      );
+    });
+  }
+  
+  async function exportCanvas(
+    canvas: HTMLCanvasElement | null,
+    filename: string,
+    mime: string = "image/png",
+    quality?: number
+  ) {
+    if (!canvas) return;
+    const blob = await canvasToBlob(canvas, mime, quality);
+    downloadBlob(blob, filename);
+  }
+  
+  async function exportDataUrl(dataUrl: string | null, filename: string) {
+    if (!dataUrl) return;
+    const blob = await (await fetch(dataUrl)).blob();
+    downloadBlob(blob, filename);
+  }
+
   //only compute fgPlacement when bg and fg change
   useEffect(() => {
     if (!bgSrc || !fgSrc) return;
@@ -383,6 +453,38 @@ export default function App() {
           />
         </label>
       </div>
+
+      <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <button
+          onClick={onExportComposite}
+          disabled={!bgSrc || !fgSrc || !fgPlacement}
+        >
+          Export Composite (PNG)
+        </button>
+      
+        <button
+          onClick={onExportShadow}
+          disabled={!bgSrc || !fgSrc || !fgPlacement}
+        >
+          Export Shadow (PNG)
+        </button>
+      
+        <button
+          onClick={onExportMask}
+          disabled={!fgSrc || !fgPlacement}
+        >
+          Export Mask (PNG)
+        </button>
+      
+        {/* optional originals */}
+        <button onClick={onExportForegroundOriginal} disabled={!fgSrc}>
+          Export FG Original
+        </button>
+        <button onClick={onExportBackgroundOriginal} disabled={!bgSrc}>
+          Export BG Original
+        </button>
+    </div>
+
 
       {/* Previews */}
       <div
