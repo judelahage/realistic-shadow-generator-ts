@@ -387,10 +387,6 @@ export default function App() {
             }
           />
         </label>
-
-        <div style={{ opacity: 0.7, flex: "0 0 auto" }}>
-          Depth loaded: {depthSrc ? "yes" : "no"}
-        </div>
       </div>
 
       {/* Previews */}
