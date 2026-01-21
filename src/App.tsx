@@ -591,7 +591,7 @@ export default function App() {
             style={{
               width: "100%",
               maxWidth: 520,
-              aspectRatio: "1 / 1",
+              
               backgroundColor: "rgba(0,0,0,0.35)",
               borderRadius: 10,
               overflow: "hidden",
@@ -604,7 +604,7 @@ export default function App() {
               style={{
                 width: "100%",
                 height: "100%",
-                objectFit: "contain",
+                
                 display: "block",
               }}
             />
