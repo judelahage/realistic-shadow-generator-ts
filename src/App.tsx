@@ -142,8 +142,8 @@ export default function App() {
         (canvas.height) / fg.naturalHeight
       );
       
-      const w = Math.round(fg.naturalWidth);
-      const h = Math.round(fg.naturalHeight);
+      const w = Math.round(scale * fg.naturalWidth);
+      const h = Math.round(scale * fg.naturalHeight);
       const x = Math.round((canvas.width - w) / 2);
       const y = Math.round(canvas.height - h);
 
