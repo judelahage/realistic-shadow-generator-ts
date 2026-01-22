@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 type Light = { angle: number; elev: number };
 
-function readFileAsDataURL(file: File): Promise<string> { //read files into decodable urls
+function readFileAsDataURL(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
@@ -11,20 +11,31 @@ function readFileAsDataURL(file: File): Promise<string> { //read files into deco
   });
 }
 
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    // Safe for future cases where images might not be data URLs
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
 export default function App() {
   const [fgSrc, setFgSrc] = useState<string | null>(null);
   const [bgSrc, setBgSrc] = useState<string | null>(null);
   const [depthSrc, setDepthSrc] = useState<string | null>(null);
-  
-  const canvasRef = useRef<HTMLCanvasElement | null>(null); //reference for composite canvas DOM element
-  const maskRef = useRef<HTMLCanvasElement | null>(null); //reference for mask canvas DOM element
-  const shadowRef = useRef<HTMLCanvasElement | null>(null); //reference for shadow canvas DOM element
-  const depthCanvasRef = useRef<HTMLCanvasElement | null>(null); //reference for depth canvas DOM element
-  
-  const [light, setLight] = useState<Light>({ angle: 180, elev: 55 }); //default starting light parameters so shadow can be visible on image load
-  const [maskVersion, setMaskVersion] = useState(0);
 
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const maskRef = useRef<HTMLCanvasElement | null>(null);
+  const shadowRef = useRef<HTMLCanvasElement | null>(null);
+  const depthCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const [light, setLight] = useState<Light>({ angle: 180, elev: 55 });
+  const [maskVersion, setMaskVersion] = useState(0);
   const [shadowVersion, setShadowVersion] = useState(0);
+
   const [fgPlacement, setFgPlacement] = useState<{
     x: number;
     y: number;
@@ -32,55 +43,67 @@ export default function App() {
     h: number;
   } | null>(null);
 
+  // Depth buffer (Step 2)
   const [depthBuf, setDepthBuf] = useState<Float32Array | null>(null);
   const [depthW, setDepthW] = useState(0);
   const [depthH, setDepthH] = useState(0);
-  //const [depthVersion, setDepthVersion] = useState(0);
-  
-  
-  //file imports
+  const [depthVersion, setDepthVersion] = useState(0);
+
+  // -----------------------------
+  // File imports
+  // -----------------------------
   async function onPickFg(file: File | null) {
-    if (!file) { setFgSrc(null); setFgPlacement(null); return; }
+    if (!file) {
+      setFgSrc(null);
+      setFgPlacement(null);
+      return;
+    }
     setFgPlacement(null);
     setFgSrc(await readFileAsDataURL(file));
   }
 
   async function onPickBg(file: File | null) {
-    if (!file) { setBgSrc(null); setFgPlacement(null); return; }
+    if (!file) {
+      setBgSrc(null);
+      setFgPlacement(null);
+      return;
+    }
     setFgPlacement(null);
     setBgSrc(await readFileAsDataURL(file));
   }
 
   async function onPickDepth(file: File | null) {
-    if (!file) { setDepthSrc(null); return; }
+    if (!file) {
+      setDepthSrc(null);
+      return;
+    }
     setDepthSrc(await readFileAsDataURL(file));
   }
 
-
-  //file exports
+  // -----------------------------
+  // File exports
+  // -----------------------------
   function makeStamp() {
     const d = new Date();
-    // 2026-01-21_13-05-09
     return d.toISOString().replace("T", "_").replaceAll(":", "-").slice(0, 19);
   }
-  
+
   async function onExportComposite() {
     await exportCanvas(canvasRef.current, `composite_${makeStamp()}.png`);
   }
-  
+
   async function onExportShadow() {
     await exportCanvas(shadowRef.current, `shadow_${makeStamp()}.png`);
   }
-  
+
   async function onExportMask() {
     await exportCanvas(maskRef.current, `mask_${makeStamp()}.png`);
   }
-  
-  // optional: export the original uploaded images (not the rendered canvases)
+
   async function onExportForegroundOriginal() {
     await exportDataUrl(fgSrc, `foreground_original_${makeStamp()}.png`);
   }
-  
+
   async function onExportBackgroundOriginal() {
     await exportDataUrl(bgSrc, `background_original_${makeStamp()}.png`);
   }
@@ -109,7 +132,7 @@ export default function App() {
       );
     });
   }
-  
+
   async function exportCanvas(
     canvas: HTMLCanvasElement | null,
     filename: string,
@@ -120,24 +143,16 @@ export default function App() {
     const blob = await canvasToBlob(canvas, mime, quality);
     downloadBlob(blob, filename);
   }
-  
+
   async function exportDataUrl(dataUrl: string | null, filename: string) {
     if (!dataUrl) return;
     const blob = await (await fetch(dataUrl)).blob();
     downloadBlob(blob, filename);
   }
 
-  function loadImage(src: string): Promise<HTMLImageElement> {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.onload = () => resolve(img);
-      img.onerror = reject;
-      img.src = src;
-    });
-  }
-  
-  //only compute fgPlacement when bg and fg change
+  // -----------------------------
+  // Compute fgPlacement (once bg+fg are loaded)
+  // -----------------------------
   useEffect(() => {
     if (!bgSrc || !fgSrc) return;
 
@@ -154,18 +169,15 @@ export default function App() {
       if (!bg.complete || !fg.complete) return;
       if (bg.naturalWidth === 0 || fg.naturalWidth === 0) return;
 
-      // Set composite canvas size from background
       canvas.width = bg.naturalWidth;
       canvas.height = bg.naturalHeight;
 
-      // Compute placement once
-      //scale only happens if foreground is bigger than background
       const scale = Math.min(
         1,
-        (canvas.width) / fg.naturalWidth,
-        (canvas.height) / fg.naturalHeight
+        canvas.width / fg.naturalWidth,
+        canvas.height / fg.naturalHeight
       );
-      
+
       const w = Math.round(scale * fg.naturalWidth);
       const h = Math.round(scale * fg.naturalHeight);
       const x = Math.round((canvas.width - w) / 2);
@@ -176,7 +188,6 @@ export default function App() {
 
     bg.onload = tryCompute;
     fg.onload = tryCompute;
-
     bg.src = bgSrc;
     fg.src = fgSrc;
 
@@ -184,64 +195,68 @@ export default function App() {
       cancelled = true;
     };
   }, [bgSrc, fgSrc]);
-  
+
+  // -----------------------------
   // Draw composite: BG -> Shadow -> FG
+  // -----------------------------
   useEffect(() => {
     if (!bgSrc) return;
+
     const canvas = canvasRef.current;
     if (!canvas) return;
+
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
     let cancelled = false;
 
     const bg = new Image();
     bg.onload = () => {
-      if(cancelled) return;
-      
-      if (canvas.width !== bg.naturalWidth || canvas.height !== bg.naturalHeight) {
+      if (cancelled) return;
+
+      if (
+        canvas.width !== bg.naturalWidth ||
+        canvas.height !== bg.naturalHeight
+      ) {
         canvas.width = bg.naturalWidth;
         canvas.height = bg.naturalHeight;
       }
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(bg, 0, 0); //draw the background
+      ctx.drawImage(bg, 0, 0);
 
       const shadowCanvas = shadowRef.current;
-      if (
-        shadowCanvas &&
-        shadowCanvas.width > 0 &&
-        shadowCanvas.height > 0
-      ) {
-        ctx.drawImage(shadowCanvas, 0, 0); //2 draw the shadow
+      if (shadowCanvas && shadowCanvas.width > 0 && shadowCanvas.height > 0) {
+        ctx.drawImage(shadowCanvas, 0, 0);
       }
 
       if (!fgSrc || !fgPlacement) return;
-      
+
       const fg = new Image();
       fg.onload = () => {
-        if(cancelled) return;
-        const scale = Math.min(
-          1,
-          (canvas.width) / fg.naturalWidth,
-          (canvas.height) / fg.naturalHeight
+        if (cancelled) return;
+        // draw using fgPlacement to avoid recompute drift
+        ctx.drawImage(
+          fg,
+          fgPlacement.x,
+          fgPlacement.y,
+          fgPlacement.w,
+          fgPlacement.h
         );
-
-        const w = Math.round(fg.naturalWidth * scale);
-        const h = Math.round(fg.naturalHeight * scale);
-        const x = Math.round((canvas.width - w) / 2);
-        const y = Math.round(canvas.height - h);
-
-        ctx.drawImage(fg, x, y, w, h); //3 draw the foreground
       };
       fg.src = fgSrc;
     };
+
     bg.src = bgSrc;
+
     return () => {
       cancelled = true;
-    };  
+    };
   }, [bgSrc, fgSrc, fgPlacement, shadowVersion]);
 
+  // -----------------------------
   // Build mask from FG alpha
+  // -----------------------------
   useEffect(() => {
     if (!fgSrc) return;
     if (!fgPlacement) return;
@@ -256,7 +271,7 @@ export default function App() {
     off.width = fgPlacement.w;
     off.height = fgPlacement.h;
 
-    const offCtx = off.getContext("2d");
+    const offCtx = off.getContext("2d", { willReadFrequently: true });
     if (!offCtx) return;
 
     const fg = new Image();
@@ -269,7 +284,7 @@ export default function App() {
 
       for (let i = 0; i < d.length; i += 4) {
         const a = d[i + 3];
-        d[i + 0] = 255; //make every channel white except the alpha channel which is 4th channel
+        d[i + 0] = 255;
         d[i + 1] = 255;
         d[i + 2] = 255;
         d[i + 3] = a;
@@ -277,7 +292,6 @@ export default function App() {
 
       maskCanvas.width = off.width;
       maskCanvas.height = off.height;
-
       ctx.putImageData(imgData, 0, 0);
       setMaskVersion((v) => v + 1);
     };
@@ -285,7 +299,9 @@ export default function App() {
     fg.src = fgSrc;
   }, [fgSrc, fgPlacement]);
 
-  // Draw shadow from mask onto shadowCanvas
+  // -----------------------------
+  // Draw shadow from mask onto shadowCanvas (Step 0/2 behavior unchanged)
+  // -----------------------------
   useEffect(() => {
     if (!bgSrc) return;
     if (!fgSrc) return;
@@ -312,14 +328,12 @@ export default function App() {
     const w = fgPlacement.w;
     const h = fgPlacement.h;
 
-    // 0° = light from right, 90° = light from above
     const rad = (light.angle * Math.PI) / 180;
 
     // Shadow direction is opposite the light direction
     const dirX = -Math.cos(rad);
     const dirY = Math.sin(rad);
 
-    // longer shadows when elevation is low
     const elevClamped = Math.max(1, Math.min(89, light.elev));
     const elevRad = (elevClamped * Math.PI) / 180;
     const k = 1 / Math.tan(elevRad);
@@ -328,47 +342,35 @@ export default function App() {
     const perpX = -dirY;
     const perpY = dirX;
 
-    // This is the mapped direction of the silhouette's local +y axis (after projection).
-    // (In practice we draw the silhouette with negative y upwards, so this creates a proper cast.)
     const c = -k * dirX + squash * perpX;
     const d = -k * dirY + squash * perpY;
 
     sctx.save();
-
-    // Anchor at bottom-center of subject
     sctx.translate(fgPlacement.x + w / 2, fgPlacement.y + h);
-
-    // Apply projection: keep local x as-is, project local y into (c,d)
-    // transform(a, b, c, d, e, f):
-    //   X = a*x + c*y + e
-    //   Y = b*x + d*y + f
-    // Here: a=1, b=0 (no "orbit", no rotation of the original x axis)
     sctx.transform(1, 0, c, d, 0, 0);
 
-    //blurred layer underneath
     const invTan = 1 / Math.tan(elevRad);
     const blurPx = Math.round(6 * Math.max(0.7, Math.min(2.0, invTan)));
 
+    // blurred layer
     sctx.filter = `blur(${blurPx}px)`;
     sctx.globalAlpha = 0.45;
-
     sctx.globalCompositeOperation = "source-over";
     sctx.drawImage(maskCanvas, -w / 2, -h, w, h);
     sctx.globalCompositeOperation = "source-in";
     sctx.fillStyle = "black";
     sctx.fillRect(-w / 2, -h, w, h);
 
-    //sharp layer above it
+    // sharp layer
     sctx.filter = "none";
-    sctx.globalAlpha = 0.90;
-
+    sctx.globalAlpha = 0.9;
     sctx.globalCompositeOperation = "source-over";
     sctx.drawImage(maskCanvas, -w / 2, -h, w, h);
     sctx.globalCompositeOperation = "source-in";
     sctx.fillStyle = "black";
     sctx.fillRect(-w / 2, -h, w, h);
 
-    //fade layers together
+    // fade
     sctx.filter = "none";
     sctx.globalAlpha = 1;
     sctx.globalCompositeOperation = "destination-in";
@@ -381,78 +383,76 @@ export default function App() {
     sctx.fillStyle = fade;
     sctx.fillRect(-w / 2, -h, w, h);
 
-    // reset
     sctx.globalCompositeOperation = "source-over";
     sctx.globalAlpha = 1;
     sctx.filter = "none";
-
     sctx.restore();
+
     setShadowVersion((v) => v + 1);
   }, [bgSrc, fgSrc, fgPlacement, light, maskVersion]);
 
-  /*useEffect(() => {
+  // -----------------------------
+  // Build depth buffer from depthSrc (Step 2)
+  // -----------------------------
+  useEffect(() => {
     let cancelled = false;
+
     async function buildDepth() {
-      if(!depthSrc || !fgPlacement) {
+      if (!depthSrc || !fgPlacement) {
         setDepthBuf(null);
         setDepthW(0);
         setDepthH(0);
         setDepthVersion((v) => v + 1);
         return;
       }
+
       const w = Math.max(1, Math.round(fgPlacement.w));
       const h = Math.max(1, Math.round(fgPlacement.h));
-  
-      //sample pixels in canvas
+
       let c = depthCanvasRef.current;
-      if(!c){
+      if (!c) {
         c = document.createElement("canvas");
-        depthCanvasRef.current = c;      
+        depthCanvasRef.current = c;
       }
       c.width = w;
       c.height = h;
-  
+
       const ctx = c.getContext("2d", { willReadFrequently: true });
       if (!ctx) return;
-  
-      // Load depth image and draw it scaled to match fgPlacement size
+
       const img = await loadImage(depthSrc);
       if (cancelled) return;
-  
+
       ctx.clearRect(0, 0, w, h);
       ctx.drawImage(img, 0, 0, w, h);
-  
+
       const id = ctx.getImageData(0, 0, w, h);
       const data = id.data;
-  
+
       const buf = new Float32Array(w * h);
-  
-      // Convert RGB -> depth in [0..1]
-      // Assumption: bright = closer (bigger depth value)
-      // We'll store depth01 = brightness (0..1).
+
       for (let i = 0, p = 0; i < data.length; i += 4, p++) {
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
-        // average brightness
         const brightness = (r + g + b) / (3 * 255);
         buf[p] = brightness; // 0..1
       }
-  
+
       if (cancelled) return;
-  
+
       setDepthBuf(buf);
       setDepthW(w);
       setDepthH(h);
       setDepthVersion((v) => v + 1);
     }
-  
+
     buildDepth();
-  
+
     return () => {
       cancelled = true;
     };
-  }, [depthSrc, fgPlacement]); */
+  }, [depthSrc, fgPlacement]);
 
   return (
     <div
@@ -494,7 +494,7 @@ export default function App() {
         </label>
 
         <label style={{ display: "grid", gap: 6 }}>
-        Upload Depth Map (aligned to foreground)
+          Upload Depth Map (aligned to foreground)
           <input
             type="file"
             accept="image/*"
@@ -502,8 +502,10 @@ export default function App() {
           />
         </label>
 
-        
-
+        <div style={{ opacity: 0.8, fontSize: 12, marginTop: 6 }}>
+          Depth loaded: {depthSrc ? "yes" : "no"} | Buffer:
+          {depthBuf ? ` ${depthW}x${depthH}` : " none"}
+        </div>
       </div>
 
       {/* light controls */}
@@ -564,30 +566,22 @@ export default function App() {
         >
           Export Composite (PNG)
         </button>
-      
-        <button
-          onClick={onExportShadow}
-          disabled={!bgSrc || !fgSrc || !fgPlacement}
-        >
+
+        <button onClick={onExportShadow} disabled={!bgSrc || !fgSrc || !fgPlacement}>
           Export Shadow (PNG)
         </button>
-      
-        <button
-          onClick={onExportMask}
-          disabled={!fgSrc || !fgPlacement}
-        >
+
+        <button onClick={onExportMask} disabled={!fgSrc || !fgPlacement}>
           Export Mask (PNG)
         </button>
-      
-        {/* optional originals */}
+
         <button onClick={onExportForegroundOriginal} disabled={!fgSrc}>
           Export FG Original
         </button>
         <button onClick={onExportBackgroundOriginal} disabled={!bgSrc}>
           Export BG Original
         </button>
-    </div>
-
+      </div>
 
       {/* Previews */}
       <div
