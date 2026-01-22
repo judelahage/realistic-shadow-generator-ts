@@ -40,7 +40,11 @@ export default function App() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const maskRef = useRef<HTMLCanvasElement | null>(null);
   const shadowRef = useRef<HTMLCanvasElement | null>(null);
-  const depthCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const depthCanvasRef = useRef<HTMLCanvasElement | null>(null); // offscreen depth sampling
+
+  // Depth preview canvases (new)
+  const depthPreviewRef = useRef<HTMLCanvasElement | null>(null);
+  const depthMaskedPreviewRef = useRef<HTMLCanvasElement | null>(null);
 
   const [light, setLight] = useState<Light>({ angle: 180, elev: 55 });
   const [maskVersion, setMaskVersion] = useState(0);
@@ -53,20 +57,33 @@ export default function App() {
     h: number;
   } | null>(null);
 
-  // Depth buffer (Step 2)
+  // Depth buffer
   const [depthBuf, setDepthBuf] = useState<Float32Array | null>(null);
   const [depthW, setDepthW] = useState(0);
   const [depthH, setDepthH] = useState(0);
-
-  // Option A: keep + use depthVersion
   const [depthVersion, setDepthVersion] = useState(0);
 
-  // Step 3: prebuilt depth-sliced canvases (so we don't rebuild per light change)
+  // Prebuilt depth slices (so we don't rebuild per light change)
   const depthLayersRef = useRef<DepthLayer[]>([]);
   const [depthLayersVersion, setDepthLayersVersion] = useState(0);
 
-  // Step 3 control: how much depth affects shadow length/blur
+  // Controls
   const [depthStrength, setDepthStrength] = useState(0.8);
+
+  // Depth calibration
+  const [invertDepth, setInvertDepth] = useState(false);
+  const [depthGamma, setDepthGamma] = useState(1.0); // 0.4..2.5 typical
+  const [layerCount, setLayerCount] = useState(16); // 8..32 typical
+
+  // Depth alignment (new)
+  // offset in pixels in the depth-sampling canvas space (same size as fgPlacement w/h)
+  const [depthOffsetX, setDepthOffsetX] = useState(0);
+  const [depthOffsetY, setDepthOffsetY] = useState(0);
+  // scale multiplier around center (1 = no scale)
+  const [depthScale, setDepthScale] = useState(1);
+
+  // Optional: hide/show previews (new)
+  const [showDepthPreview, setShowDepthPreview] = useState(true);
 
   // -----------------------------
   // File imports
@@ -104,7 +121,6 @@ export default function App() {
   // -----------------------------
   function makeStamp() {
     const d = new Date();
-    // avoid replaceAll + replace all ":" safely
     return d.toISOString().replace("T", "_").replace(/:/g, "-").slice(0, 19);
   }
 
@@ -319,7 +335,7 @@ export default function App() {
   }, [fgSrc, fgPlacement]);
 
   // -----------------------------
-  // Build depth buffer from depthSrc (Step 2)
+  // Build depth buffer from depthSrc (with invert/gamma + alignment)
   // -----------------------------
   useEffect(() => {
     let cancelled = false;
@@ -350,8 +366,21 @@ export default function App() {
       const img = await loadImage(depthSrc);
       if (cancelled) return;
 
+      // Draw depth image into the sampling canvas, with center-scale + offsets.
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, w, h);
-      ctx.drawImage(img, 0, 0, w, h);
+
+      const s = Math.max(0.1, Math.min(4, depthScale));
+      const dx = depthOffsetX;
+      const dy = depthOffsetY;
+
+      // baseline draw is "fill the same w/h"
+      const dw = w * s;
+      const dh = h * s;
+      const x = (w - dw) / 2 + dx;
+      const y = (h - dh) / 2 + dy;
+
+      ctx.drawImage(img, x, y, dw, dh);
 
       const id = ctx.getImageData(0, 0, w, h);
       const data = id.data;
@@ -362,8 +391,14 @@ export default function App() {
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
-        const brightness = (r + g + b) / (3 * 255);
-        buf[p] = brightness; // 0..1
+
+        let z = (r + g + b) / (3 * 255); // 0..1
+        if (invertDepth) z = 1 - z;
+
+        // gamma: <1 boosts highlights, >1 boosts shadows
+        z = Math.pow(clamp01(z), depthGamma);
+
+        buf[p] = z;
       }
 
       if (cancelled) return;
@@ -379,15 +414,121 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [depthSrc, fgPlacement]);
+  }, [
+    depthSrc,
+    fgPlacement,
+    invertDepth,
+    depthGamma,
+    depthScale,
+    depthOffsetX,
+    depthOffsetY,
+  ]);
 
   // -----------------------------
-  // Step 3: Pre-slice mask into depth layers (rebuild only when mask/depth changes)
+  // Depth preview render (new): processed depth + masked depth
+  // -----------------------------
+  useEffect(() => {
+    const c1 = depthPreviewRef.current;
+    const c2 = depthMaskedPreviewRef.current;
+
+    // If previews are hidden, keep canvases minimal (but still valid)
+    if (!showDepthPreview) {
+      if (c1) {
+        c1.width = 1;
+        c1.height = 1;
+        const x = c1.getContext("2d");
+        x?.clearRect(0, 0, 1, 1);
+      }
+      if (c2) {
+        c2.width = 1;
+        c2.height = 1;
+        const x = c2.getContext("2d");
+        x?.clearRect(0, 0, 1, 1);
+      }
+      return;
+    }
+
+    if (!depthBuf || depthW <= 0 || depthH <= 0) {
+      if (c1) {
+        c1.width = 1;
+        c1.height = 1;
+        const x = c1.getContext("2d");
+        x?.clearRect(0, 0, 1, 1);
+      }
+      if (c2) {
+        c2.width = 1;
+        c2.height = 1;
+        const x = c2.getContext("2d");
+        x?.clearRect(0, 0, 1, 1);
+      }
+      return;
+    }
+
+    const w = depthW;
+    const h = depthH;
+
+    // Build grayscale image (opaque)
+    const img = new ImageData(w, h);
+    const id = img.data;
+
+    for (let p = 0; p < w * h; p++) {
+      const v = Math.round(clamp01(depthBuf[p]) * 255);
+      const o = p * 4;
+      id[o + 0] = v;
+      id[o + 1] = v;
+      id[o + 2] = v;
+      id[o + 3] = 255;
+    }
+
+    if (c1) {
+      if (c1.width !== w) c1.width = w;
+      if (c1.height !== h) c1.height = h;
+      const ctx = c1.getContext("2d", { willReadFrequently: true });
+      ctx?.putImageData(img, 0, 0);
+    }
+
+    // Build masked grayscale image (alpha from mask)
+    if (c2) {
+      if (c2.width !== w) c2.width = w;
+      if (c2.height !== h) c2.height = h;
+
+      const out = new ImageData(w, h);
+      const od = out.data;
+
+      let maskAlpha: Uint8ClampedArray | null = null;
+      const maskCanvas = maskRef.current;
+      if (maskCanvas && maskCanvas.width === w && maskCanvas.height === h) {
+        const mctx = maskCanvas.getContext("2d", { willReadFrequently: true });
+        if (mctx) {
+          const mid = mctx.getImageData(0, 0, w, h).data;
+          maskAlpha = new Uint8ClampedArray(w * h);
+          for (let p = 0; p < w * h; p++) {
+            maskAlpha[p] = mid[p * 4 + 3];
+          }
+        }
+      }
+
+      for (let p = 0; p < w * h; p++) {
+        const v = Math.round(clamp01(depthBuf[p]) * 255);
+        const a = maskAlpha ? maskAlpha[p] : 255;
+        const o = p * 4;
+        od[o + 0] = v;
+        od[o + 1] = v;
+        od[o + 2] = v;
+        od[o + 3] = a; // transparent outside subject
+      }
+
+      const ctx2 = c2.getContext("2d", { willReadFrequently: true });
+      ctx2?.putImageData(out, 0, 0);
+    }
+  }, [showDepthPreview, depthBuf, depthW, depthH, maskVersion]);
+
+  // -----------------------------
+  // Pre-slice mask into depth layers (rebuild only when mask/depth changes)
   // -----------------------------
   useEffect(() => {
     const maskCanvas = maskRef.current;
 
-    // Clear if we don't have everything
     if (!maskCanvas || !fgPlacement || !depthBuf) {
       depthLayersRef.current = [];
       setDepthLayersVersion((v) => v + 1);
@@ -397,14 +538,12 @@ export default function App() {
     const w = fgPlacement.w;
     const h = fgPlacement.h;
 
-    // Must match
     if (maskCanvas.width !== w || maskCanvas.height !== h) {
       depthLayersRef.current = [];
       setDepthLayersVersion((v) => v + 1);
       return;
     }
 
-    // Must match
     if (depthW !== w || depthH !== h) {
       depthLayersRef.current = [];
       setDepthLayersVersion((v) => v + 1);
@@ -421,12 +560,12 @@ export default function App() {
     const maskId = mctx.getImageData(0, 0, w, h);
     const maskData = maskId.data;
 
-    const layerCount = 16; // tweakable: 12..24 typical
+    const layerCountLocal = Math.max(1, Math.round(layerCount));
     const layers: DepthLayer[] = [];
 
-    for (let li = 0; li < layerCount; li++) {
-      const z0 = li / layerCount;
-      const z1 = (li + 1) / layerCount;
+    for (let li = 0; li < layerCountLocal; li++) {
+      const z0 = li / layerCountLocal;
+      const z1 = (li + 1) / layerCountLocal;
       const zMid = (z0 + z1) * 0.5;
 
       const c = document.createElement("canvas");
@@ -444,10 +583,11 @@ export default function App() {
         if (a === 0) continue;
 
         const z = depthBuf[p];
-        const inRange = li === layerCount - 1 ? z >= z0 && z <= 1 : z >= z0 && z < z1;
+        const inRange =
+          li === layerCountLocal - 1 ? z >= z0 && z <= 1 : z >= z0 && z < z1;
         if (!inRange) continue;
 
-        // black shadow pixel with mask alpha
+        // store as black with alpha
         outData[p * 4 + 0] = 0;
         outData[p * 4 + 1] = 0;
         outData[p * 4 + 2] = 0;
@@ -460,10 +600,10 @@ export default function App() {
 
     depthLayersRef.current = layers;
     setDepthLayersVersion((v) => v + 1);
-  }, [fgPlacement, maskVersion, depthVersion, depthBuf, depthW, depthH]);
+  }, [fgPlacement, maskVersion, depthVersion, depthBuf, depthW, depthH, layerCount]);
 
   // -----------------------------
-  // Draw shadow (Step 3: depth-aware when depth layers exist)
+  // Draw shadow (depth-aware when depth layers exist)
   // -----------------------------
   useEffect(() => {
     if (!bgSrc) return;
@@ -492,12 +632,9 @@ export default function App() {
     const h = fgPlacement.h;
 
     const rad = (light.angle * Math.PI) / 180;
-
-    // Shadow direction is opposite the light direction
     const dirX = -Math.cos(rad);
     const dirY = Math.sin(rad);
 
-    // longer shadows when elevation is low
     const elevClamped = Math.max(1, Math.min(89, light.elev));
     const elevRad = (elevClamped * Math.PI) / 180;
     const kBase = 1 / Math.tan(elevRad);
@@ -512,11 +649,8 @@ export default function App() {
 
     const layers = depthLayersRef.current;
 
-    // ---------
-    // If we don't have depth layers yet, fall back to the old single-silhouette method
-    // ---------
+    // Fallback: no depth layers -> old single-mask method
     if (!layers || layers.length === 0) {
-      // base transform
       const c = -kBase * dirX + squash * perpX;
       const d = -kBase * dirY + squash * perpY;
 
@@ -527,7 +661,7 @@ export default function App() {
       const invTan = 1 / Math.tan(elevRad);
       const blurPx = Math.round(6 * Math.max(0.7, Math.min(2.0, invTan)));
 
-      // blurred layer underneath
+      // blurred layer
       sctx.filter = `blur(${blurPx}px)`;
       sctx.globalAlpha = 0.45;
       sctx.globalCompositeOperation = "source-over";
@@ -536,7 +670,7 @@ export default function App() {
       sctx.fillStyle = "black";
       sctx.fillRect(-w / 2, -h, w, h);
 
-      // sharp layer above
+      // sharp layer
       sctx.filter = "none";
       sctx.globalAlpha = 0.9;
       sctx.globalCompositeOperation = "source-over";
@@ -545,7 +679,7 @@ export default function App() {
       sctx.fillStyle = "black";
       sctx.fillRect(-w / 2, -h, w, h);
 
-      // fade
+      // fade (vertical in local space)
       sctx.filter = "none";
       sctx.globalAlpha = 1;
       sctx.globalCompositeOperation = "destination-in";
@@ -567,42 +701,37 @@ export default function App() {
       return;
     }
 
-    // ---------
-    // Depth-aware draw: draw multiple depth slices, each with its own cast length + blur
-    // ---------
-    // base blur depends on elevation
+    // Depth-aware draw
     const invTan = 1 / Math.tan(elevRad);
     const baseBlur = Math.round(6 * Math.max(0.7, Math.min(2.0, invTan)));
 
     for (const layer of layers) {
       const z = clamp01(layer.zMid);
 
-      // White = "more effect" (higher/closer depending on your depth map)
-      // kLayer controls cast length; depthStrength controls how much depth changes it.
+      // cast length varies by depth
       const kLayer = kBase * (1 + depthStrength * z);
 
       const cL = -kLayer * dirX + squash * perpX;
       const dL = -kLayer * dirY + squash * perpY;
 
-      // Higher z -> blurrier + lighter, Lower z -> sharper + darker (ground contact)
+      // deeper -> blurrier + lighter
       const blurMult = lerp(0.7, 1.8, z);
       const blurPx = Math.round(baseBlur * blurMult);
 
       const sharpAlpha = lerp(0.85, 0.25, z);
-      const blurAlpha = lerp(0.06, 0.20, z);
+      const blurAlpha = lerp(0.06, 0.2, z);
 
-      // blurred pass
       sctx.save();
       sctx.translate(ax, ay);
       sctx.transform(1, 0, cL, dL, 0, 0);
-
       sctx.globalCompositeOperation = "source-over";
 
+      // blurred
       sctx.filter = `blur(${blurPx}px)`;
       sctx.globalAlpha = blurAlpha;
       sctx.drawImage(layer.canvas, -w / 2, -h, w, h);
 
-      // sharp pass
+      // sharp
       sctx.filter = "none";
       sctx.globalAlpha = sharpAlpha;
       sctx.drawImage(layer.canvas, -w / 2, -h, w, h);
@@ -610,15 +739,17 @@ export default function App() {
       sctx.restore();
     }
 
-    // Fade the whole shadow along the cast direction in screen space (robust for all transforms)
+    // Fade the whole shadow along cast direction in screen space
     sctx.save();
     sctx.setTransform(1, 0, 0, 1, 0, 0);
     sctx.globalCompositeOperation = "destination-in";
     sctx.filter = "none";
     sctx.globalAlpha = 1;
 
-    // approximate max length: subject height * base cast * (1 + depthStrength)
-    const maxLen = Math.max(10, h * kBase * (1 + Math.max(0, depthStrength)) * 0.9);
+    const maxLen = Math.max(
+      10,
+      h * kBase * (1 + Math.max(0, depthStrength)) * 0.9
+    );
     const gx0 = ax;
     const gy0 = ay;
     const gx1 = ax + dirX * maxLen;
@@ -645,6 +776,8 @@ export default function App() {
     depthLayersVersion,
     depthStrength,
   ]);
+
+  const depthReady = !!depthBuf && depthW > 0 && depthH > 0;
 
   return (
     <div
@@ -695,12 +828,12 @@ export default function App() {
         </label>
 
         <div style={{ opacity: 0.8, fontSize: 12, marginTop: 6 }}>
-          Depth loaded: {depthSrc ? "yes" : "no"} | Buffer:
-          {depthBuf ? ` ${depthW}x${depthH}` : " none"} | Depth v: {depthVersion}
+          Depth loaded: {depthSrc ? "yes" : "no"} | Buffer:{" "}
+          {depthReady ? `${depthW}x${depthH}` : "none"} | Depth v: {depthVersion}
         </div>
       </div>
 
-      {/* light controls */}
+      {/* Controls */}
       <div
         style={{
           marginTop: 14,
@@ -766,11 +899,163 @@ export default function App() {
             step={0.01}
             value={depthStrength}
             onChange={(e) => setDepthStrength(Number(e.target.value))}
-            disabled={!depthBuf}
+            disabled={!depthReady}
+          />
+        </label>
+
+        <label
+          style={{
+            display: "grid",
+            gap: 6,
+            minWidth: 180,
+            flex: "0 1 180px",
+          }}
+        >
+          Invert depth
+          <input
+            type="checkbox"
+            checked={invertDepth}
+            onChange={(e) => setInvertDepth(e.target.checked)}
+            disabled={!depthReady}
+          />
+        </label>
+
+        <label
+          style={{
+            display: "grid",
+            gap: 6,
+            minWidth: 260,
+            flex: "1 1 260px",
+          }}
+        >
+          Depth gamma: {depthGamma.toFixed(2)}
+          <input
+            type="range"
+            min={0.4}
+            max={2.5}
+            step={0.01}
+            value={depthGamma}
+            onChange={(e) => setDepthGamma(Number(e.target.value))}
+            disabled={!depthReady}
+          />
+        </label>
+
+        <label
+          style={{
+            display: "grid",
+            gap: 6,
+            minWidth: 260,
+            flex: "1 1 260px",
+          }}
+        >
+          Depth layers: {layerCount}
+          <input
+            type="range"
+            min={8}
+            max={32}
+            step={1}
+            value={layerCount}
+            onChange={(e) => setLayerCount(Number(e.target.value))}
+            disabled={!depthReady}
           />
         </label>
       </div>
 
+      {/* Depth alignment (new) */}
+      <div
+        style={{
+          marginTop: 10,
+          display: "flex",
+          gap: 16,
+          flexWrap: "wrap",
+          alignItems: "end",
+        }}
+      >
+        <label
+          style={{
+            display: "grid",
+            gap: 6,
+            minWidth: 260,
+            flex: "1 1 260px",
+          }}
+        >
+          Depth scale: {depthScale.toFixed(2)}
+          <input
+            type="range"
+            min={0.5}
+            max={2}
+            step={0.01}
+            value={depthScale}
+            onChange={(e) => setDepthScale(Number(e.target.value))}
+            disabled={!depthSrc}
+          />
+        </label>
+
+        <label
+          style={{
+            display: "grid",
+            gap: 6,
+            minWidth: 260,
+            flex: "1 1 260px",
+          }}
+        >
+          Depth offset X: {depthOffsetX}px
+          <input
+            type="range"
+            min={-300}
+            max={300}
+            step={1}
+            value={depthOffsetX}
+            onChange={(e) => setDepthOffsetX(Number(e.target.value))}
+            disabled={!depthSrc}
+          />
+        </label>
+
+        <label
+          style={{
+            display: "grid",
+            gap: 6,
+            minWidth: 260,
+            flex: "1 1 260px",
+          }}
+        >
+          Depth offset Y: {depthOffsetY}px
+          <input
+            type="range"
+            min={-300}
+            max={300}
+            step={1}
+            value={depthOffsetY}
+            onChange={(e) => setDepthOffsetY(Number(e.target.value))}
+            disabled={!depthSrc}
+          />
+        </label>
+
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <button
+            onClick={() => {
+              setDepthScale(1);
+              setDepthOffsetX(0);
+              setDepthOffsetY(0);
+            }}
+            disabled={!depthSrc}
+          >
+            Reset Depth Align
+          </button>
+
+          <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={showDepthPreview}
+              onChange={(e) => setShowDepthPreview(e.target.checked)}
+              disabled={!depthReady}
+            />
+            Show depth preview
+          </label>
+        </div>
+      </div>
+
+      {/* Export buttons */}
       <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
         <button
           onClick={onExportComposite}
@@ -811,7 +1096,6 @@ export default function App() {
         {/* Foreground */}
         <div style={{ minWidth: 0 }}>
           <h3 style={{ margin: "8px 0" }}>Foreground preview</h3>
-
           <div
             style={{
               width: "100%",
@@ -853,7 +1137,6 @@ export default function App() {
         {/* Background */}
         <div style={{ minWidth: 0 }}>
           <h3 style={{ margin: "8px 0" }}>Background preview</h3>
-
           <div
             style={{
               width: "100%",
@@ -895,7 +1178,6 @@ export default function App() {
         {/* Composite */}
         <div style={{ minWidth: 0 }}>
           <h3 style={{ margin: "8px 0" }}>Composite Preview</h3>
-
           <div
             style={{
               width: "100%",
@@ -921,7 +1203,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* mask + shadow previews */}
+      {/* mask + shadow + depth previews */}
       <div
         style={{
           marginTop: 18,
@@ -974,6 +1256,54 @@ export default function App() {
                 height: 360,
                 display: "block",
                 backgroundColor: "white",
+              }}
+            />
+          </div>
+        </div>
+
+        <div style={{ minWidth: 0 }}>
+          <h3 style={{ margin: "8px 0" }}>Depth (processed)</h3>
+          <div
+            style={{
+              width: "100%",
+              backgroundColor: "rgba(0,0,0,0.35)",
+              borderRadius: 10,
+              overflow: "hidden",
+              border: "1px solid rgba(255,255,255,0.12)",
+              boxSizing: "border-box",
+            }}
+          >
+            <canvas
+              ref={depthPreviewRef}
+              style={{
+                width: "100%",
+                height: 360,
+                display: "block",
+                backgroundColor: "black",
+              }}
+            />
+          </div>
+        </div>
+
+        <div style={{ minWidth: 0 }}>
+          <h3 style={{ margin: "8px 0" }}>Depth (masked by subject)</h3>
+          <div
+            style={{
+              width: "100%",
+              backgroundColor: "rgba(0,0,0,0.35)",
+              borderRadius: 10,
+              overflow: "hidden",
+              border: "1px solid rgba(255,255,255,0.12)",
+              boxSizing: "border-box",
+            }}
+          >
+            <canvas
+              ref={depthMaskedPreviewRef}
+              style={{
+                width: "100%",
+                height: 360,
+                display: "block",
+                backgroundColor: "black",
               }}
             />
           </div>
