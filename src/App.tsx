@@ -390,7 +390,7 @@ export default function App() {
     setShadowVersion((v) => v + 1);
   }, [bgSrc, fgSrc, fgPlacement, light, maskVersion]);
 
-  useEffect(() => {
+  /*useEffect(() => {
     let cancelled = false;
     async function buildDepth() {
       if(!depthSrc || !fgPlacement) {
@@ -452,7 +452,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [depthSrc, fgPlacement]);
+  }, [depthSrc, fgPlacement]); */
 
   return (
     <div
