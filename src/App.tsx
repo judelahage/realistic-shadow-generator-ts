@@ -85,7 +85,7 @@ export default function App() {
   // -----------------------------
   function makeStamp() {
     const d = new Date();
-    return d.toISOString().replace("T", "_").replaceAll(":", "-").slice(0, 19);
+    return d.toISOString().replace("T", "_").replace(":", "-").slice(0, 19);
   }
 
   async function onExportComposite() {
