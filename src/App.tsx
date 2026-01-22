@@ -502,10 +502,7 @@ export default function App() {
           />
         </label>
 
-        <div style={{ opacity: 0.8, fontSize: 12, marginTop: 6 }}>
-          Depth loaded: {depthSrc ? "yes" : "no"} • Buffer:{" "}
-          {depthBuf ? `${depthW}x${depthH}` : "none"}
-        </div>
+        
 
       </div>
 
