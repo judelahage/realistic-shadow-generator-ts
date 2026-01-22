@@ -47,7 +47,9 @@ export default function App() {
   const [depthBuf, setDepthBuf] = useState<Float32Array | null>(null);
   const [depthW, setDepthW] = useState(0);
   const [depthH, setDepthH] = useState(0);
-  //const [depthVersion, setDepthVersion] = useState(0);
+
+  // ✅ Option A: keep depthVersion and USE it
+  const [depthVersion, setDepthVersion] = useState(0);
 
   // -----------------------------
   // File imports
@@ -85,7 +87,8 @@ export default function App() {
   // -----------------------------
   function makeStamp() {
     const d = new Date();
-    return d.toISOString().replace("T", "_").replace(":", "-").slice(0, 19);
+    // ✅ avoid replaceAll + replace all ":" safely
+    return d.toISOString().replace("T", "_").replace(/:/g, "-").slice(0, 19);
   }
 
   async function onExportComposite() {
@@ -235,7 +238,6 @@ export default function App() {
       const fg = new Image();
       fg.onload = () => {
         if (cancelled) return;
-        // draw using fgPlacement to avoid recompute drift
         ctx.drawImage(
           fg,
           fgPlacement.x,
@@ -389,7 +391,9 @@ export default function App() {
     sctx.restore();
 
     setShadowVersion((v) => v + 1);
-  }, [bgSrc, fgSrc, fgPlacement, light, maskVersion]);
+
+    // ✅ Option A: depthVersion is “used” via deps below
+  }, [bgSrc, fgSrc, fgPlacement, light, maskVersion, depthVersion]);
 
   // -----------------------------
   // Build depth buffer from depthSrc (Step 2)
@@ -504,7 +508,7 @@ export default function App() {
 
         <div style={{ opacity: 0.8, fontSize: 12, marginTop: 6 }}>
           Depth loaded: {depthSrc ? "yes" : "no"} | Buffer:
-          {depthBuf ? ` ${depthW}x${depthH}` : " none"}
+          {depthBuf ? ` ${depthW}x${depthH}` : " none"} | Depth v: {depthVersion}
         </div>
       </div>
 
@@ -567,7 +571,10 @@ export default function App() {
           Export Composite (PNG)
         </button>
 
-        <button onClick={onExportShadow} disabled={!bgSrc || !fgSrc || !fgPlacement}>
+        <button
+          onClick={onExportShadow}
+          disabled={!bgSrc || !fgSrc || !fgPlacement}
+        >
           Export Shadow (PNG)
         </button>
 
