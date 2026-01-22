@@ -22,6 +22,16 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+function clamp01(x: number) {
+  return Math.max(0, Math.min(1, x));
+}
+
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
+}
+
+type DepthLayer = { canvas: HTMLCanvasElement; zMid: number };
+
 export default function App() {
   const [fgSrc, setFgSrc] = useState<string | null>(null);
   const [bgSrc, setBgSrc] = useState<string | null>(null);
@@ -48,8 +58,15 @@ export default function App() {
   const [depthW, setDepthW] = useState(0);
   const [depthH, setDepthH] = useState(0);
 
-  // ✅ Option A: keep depthVersion and USE it
+  // Option A: keep + use depthVersion
   const [depthVersion, setDepthVersion] = useState(0);
+
+  // Step 3: prebuilt depth-sliced canvases (so we don't rebuild per light change)
+  const depthLayersRef = useRef<DepthLayer[]>([]);
+  const [depthLayersVersion, setDepthLayersVersion] = useState(0);
+
+  // Step 3 control: how much depth affects shadow length/blur
+  const [depthStrength, setDepthStrength] = useState(0.8);
 
   // -----------------------------
   // File imports
@@ -87,7 +104,7 @@ export default function App() {
   // -----------------------------
   function makeStamp() {
     const d = new Date();
-    // ✅ avoid replaceAll + replace all ":" safely
+    // avoid replaceAll + replace all ":" safely
     return d.toISOString().replace("T", "_").replace(/:/g, "-").slice(0, 19);
   }
 
@@ -302,100 +319,6 @@ export default function App() {
   }, [fgSrc, fgPlacement]);
 
   // -----------------------------
-  // Draw shadow from mask onto shadowCanvas (Step 0/2 behavior unchanged)
-  // -----------------------------
-  useEffect(() => {
-    if (!bgSrc) return;
-    if (!fgSrc) return;
-    if (!fgPlacement) return;
-
-    const baseCanvas = canvasRef.current;
-    const shadowCanvas = shadowRef.current;
-    const maskCanvas = maskRef.current;
-    if (!baseCanvas || !shadowCanvas || !maskCanvas) return;
-    if (maskCanvas.width === 0 || maskCanvas.height === 0) return;
-
-    const sctx = shadowCanvas.getContext("2d");
-    if (!sctx) return;
-
-    shadowCanvas.width = baseCanvas.width;
-    shadowCanvas.height = baseCanvas.height;
-
-    sctx.clearRect(0, 0, shadowCanvas.width, shadowCanvas.height);
-    sctx.setTransform(1, 0, 0, 1, 0, 0);
-    sctx.globalAlpha = 1;
-    sctx.filter = "none";
-    sctx.globalCompositeOperation = "source-over";
-
-    const w = fgPlacement.w;
-    const h = fgPlacement.h;
-
-    const rad = (light.angle * Math.PI) / 180;
-
-    // Shadow direction is opposite the light direction
-    const dirX = -Math.cos(rad);
-    const dirY = Math.sin(rad);
-
-    const elevClamped = Math.max(1, Math.min(89, light.elev));
-    const elevRad = (elevClamped * Math.PI) / 180;
-    const k = 1 / Math.tan(elevRad);
-
-    const squash = 0.7;
-    const perpX = -dirY;
-    const perpY = dirX;
-
-    const c = -k * dirX + squash * perpX;
-    const d = -k * dirY + squash * perpY;
-
-    sctx.save();
-    sctx.translate(fgPlacement.x + w / 2, fgPlacement.y + h);
-    sctx.transform(1, 0, c, d, 0, 0);
-
-    const invTan = 1 / Math.tan(elevRad);
-    const blurPx = Math.round(6 * Math.max(0.7, Math.min(2.0, invTan)));
-
-    // blurred layer
-    sctx.filter = `blur(${blurPx}px)`;
-    sctx.globalAlpha = 0.45;
-    sctx.globalCompositeOperation = "source-over";
-    sctx.drawImage(maskCanvas, -w / 2, -h, w, h);
-    sctx.globalCompositeOperation = "source-in";
-    sctx.fillStyle = "black";
-    sctx.fillRect(-w / 2, -h, w, h);
-
-    // sharp layer
-    sctx.filter = "none";
-    sctx.globalAlpha = 0.9;
-    sctx.globalCompositeOperation = "source-over";
-    sctx.drawImage(maskCanvas, -w / 2, -h, w, h);
-    sctx.globalCompositeOperation = "source-in";
-    sctx.fillStyle = "black";
-    sctx.fillRect(-w / 2, -h, w, h);
-
-    // fade
-    sctx.filter = "none";
-    sctx.globalAlpha = 1;
-    sctx.globalCompositeOperation = "destination-in";
-
-    const fade = sctx.createLinearGradient(0, -h, 0, 0);
-    fade.addColorStop(0.0, "rgba(0,0,0,0.0)");
-    fade.addColorStop(0.6, "rgba(0,0,0,0.6)");
-    fade.addColorStop(1.0, "rgba(0,0,0,1.0)");
-
-    sctx.fillStyle = fade;
-    sctx.fillRect(-w / 2, -h, w, h);
-
-    sctx.globalCompositeOperation = "source-over";
-    sctx.globalAlpha = 1;
-    sctx.filter = "none";
-    sctx.restore();
-
-    setShadowVersion((v) => v + 1);
-
-    // ✅ Option A: depthVersion is “used” via deps below
-  }, [bgSrc, fgSrc, fgPlacement, light, maskVersion, depthVersion]);
-
-  // -----------------------------
   // Build depth buffer from depthSrc (Step 2)
   // -----------------------------
   useEffect(() => {
@@ -457,6 +380,271 @@ export default function App() {
       cancelled = true;
     };
   }, [depthSrc, fgPlacement]);
+
+  // -----------------------------
+  // Step 3: Pre-slice mask into depth layers (rebuild only when mask/depth changes)
+  // -----------------------------
+  useEffect(() => {
+    const maskCanvas = maskRef.current;
+
+    // Clear if we don't have everything
+    if (!maskCanvas || !fgPlacement || !depthBuf) {
+      depthLayersRef.current = [];
+      setDepthLayersVersion((v) => v + 1);
+      return;
+    }
+
+    const w = fgPlacement.w;
+    const h = fgPlacement.h;
+
+    // Must match
+    if (maskCanvas.width !== w || maskCanvas.height !== h) {
+      depthLayersRef.current = [];
+      setDepthLayersVersion((v) => v + 1);
+      return;
+    }
+
+    // Must match
+    if (depthW !== w || depthH !== h) {
+      depthLayersRef.current = [];
+      setDepthLayersVersion((v) => v + 1);
+      return;
+    }
+
+    const mctx = maskCanvas.getContext("2d", { willReadFrequently: true });
+    if (!mctx) {
+      depthLayersRef.current = [];
+      setDepthLayersVersion((v) => v + 1);
+      return;
+    }
+
+    const maskId = mctx.getImageData(0, 0, w, h);
+    const maskData = maskId.data;
+
+    const layerCount = 16; // tweakable: 12..24 typical
+    const layers: DepthLayer[] = [];
+
+    for (let li = 0; li < layerCount; li++) {
+      const z0 = li / layerCount;
+      const z1 = (li + 1) / layerCount;
+      const zMid = (z0 + z1) * 0.5;
+
+      const c = document.createElement("canvas");
+      c.width = w;
+      c.height = h;
+
+      const ctx = c.getContext("2d", { willReadFrequently: true });
+      if (!ctx) continue;
+
+      const out = new ImageData(w, h);
+      const outData = out.data;
+
+      for (let p = 0; p < w * h; p++) {
+        const a = maskData[p * 4 + 3];
+        if (a === 0) continue;
+
+        const z = depthBuf[p];
+        const inRange = li === layerCount - 1 ? z >= z0 && z <= 1 : z >= z0 && z < z1;
+        if (!inRange) continue;
+
+        // black shadow pixel with mask alpha
+        outData[p * 4 + 0] = 0;
+        outData[p * 4 + 1] = 0;
+        outData[p * 4 + 2] = 0;
+        outData[p * 4 + 3] = a;
+      }
+
+      ctx.putImageData(out, 0, 0);
+      layers.push({ canvas: c, zMid });
+    }
+
+    depthLayersRef.current = layers;
+    setDepthLayersVersion((v) => v + 1);
+  }, [fgPlacement, maskVersion, depthVersion, depthBuf, depthW, depthH]);
+
+  // -----------------------------
+  // Draw shadow (Step 3: depth-aware when depth layers exist)
+  // -----------------------------
+  useEffect(() => {
+    if (!bgSrc) return;
+    if (!fgSrc) return;
+    if (!fgPlacement) return;
+
+    const baseCanvas = canvasRef.current;
+    const shadowCanvas = shadowRef.current;
+    const maskCanvas = maskRef.current;
+    if (!baseCanvas || !shadowCanvas || !maskCanvas) return;
+    if (maskCanvas.width === 0 || maskCanvas.height === 0) return;
+
+    const sctx = shadowCanvas.getContext("2d");
+    if (!sctx) return;
+
+    shadowCanvas.width = baseCanvas.width;
+    shadowCanvas.height = baseCanvas.height;
+
+    sctx.clearRect(0, 0, shadowCanvas.width, shadowCanvas.height);
+    sctx.setTransform(1, 0, 0, 1, 0, 0);
+    sctx.globalAlpha = 1;
+    sctx.filter = "none";
+    sctx.globalCompositeOperation = "source-over";
+
+    const w = fgPlacement.w;
+    const h = fgPlacement.h;
+
+    const rad = (light.angle * Math.PI) / 180;
+
+    // Shadow direction is opposite the light direction
+    const dirX = -Math.cos(rad);
+    const dirY = Math.sin(rad);
+
+    // longer shadows when elevation is low
+    const elevClamped = Math.max(1, Math.min(89, light.elev));
+    const elevRad = (elevClamped * Math.PI) / 180;
+    const kBase = 1 / Math.tan(elevRad);
+
+    const squash = 0.7;
+    const perpX = -dirY;
+    const perpY = dirX;
+
+    // Anchor at bottom-center of subject
+    const ax = fgPlacement.x + w / 2;
+    const ay = fgPlacement.y + h;
+
+    const layers = depthLayersRef.current;
+
+    // ---------
+    // If we don't have depth layers yet, fall back to the old single-silhouette method
+    // ---------
+    if (!layers || layers.length === 0) {
+      // base transform
+      const c = -kBase * dirX + squash * perpX;
+      const d = -kBase * dirY + squash * perpY;
+
+      sctx.save();
+      sctx.translate(ax, ay);
+      sctx.transform(1, 0, c, d, 0, 0);
+
+      const invTan = 1 / Math.tan(elevRad);
+      const blurPx = Math.round(6 * Math.max(0.7, Math.min(2.0, invTan)));
+
+      // blurred layer underneath
+      sctx.filter = `blur(${blurPx}px)`;
+      sctx.globalAlpha = 0.45;
+      sctx.globalCompositeOperation = "source-over";
+      sctx.drawImage(maskCanvas, -w / 2, -h, w, h);
+      sctx.globalCompositeOperation = "source-in";
+      sctx.fillStyle = "black";
+      sctx.fillRect(-w / 2, -h, w, h);
+
+      // sharp layer above
+      sctx.filter = "none";
+      sctx.globalAlpha = 0.9;
+      sctx.globalCompositeOperation = "source-over";
+      sctx.drawImage(maskCanvas, -w / 2, -h, w, h);
+      sctx.globalCompositeOperation = "source-in";
+      sctx.fillStyle = "black";
+      sctx.fillRect(-w / 2, -h, w, h);
+
+      // fade
+      sctx.filter = "none";
+      sctx.globalAlpha = 1;
+      sctx.globalCompositeOperation = "destination-in";
+
+      const fade = sctx.createLinearGradient(0, -h, 0, 0);
+      fade.addColorStop(0.0, "rgba(0,0,0,0.0)");
+      fade.addColorStop(0.6, "rgba(0,0,0,0.6)");
+      fade.addColorStop(1.0, "rgba(0,0,0,1.0)");
+
+      sctx.fillStyle = fade;
+      sctx.fillRect(-w / 2, -h, w, h);
+
+      sctx.globalCompositeOperation = "source-over";
+      sctx.globalAlpha = 1;
+      sctx.filter = "none";
+      sctx.restore();
+
+      setShadowVersion((v) => v + 1);
+      return;
+    }
+
+    // ---------
+    // Depth-aware draw: draw multiple depth slices, each with its own cast length + blur
+    // ---------
+    // base blur depends on elevation
+    const invTan = 1 / Math.tan(elevRad);
+    const baseBlur = Math.round(6 * Math.max(0.7, Math.min(2.0, invTan)));
+
+    for (const layer of layers) {
+      const z = clamp01(layer.zMid);
+
+      // White = "more effect" (higher/closer depending on your depth map)
+      // kLayer controls cast length; depthStrength controls how much depth changes it.
+      const kLayer = kBase * (1 + depthStrength * z);
+
+      const cL = -kLayer * dirX + squash * perpX;
+      const dL = -kLayer * dirY + squash * perpY;
+
+      // Higher z -> blurrier + lighter, Lower z -> sharper + darker (ground contact)
+      const blurMult = lerp(0.7, 1.8, z);
+      const blurPx = Math.round(baseBlur * blurMult);
+
+      const sharpAlpha = lerp(0.85, 0.25, z);
+      const blurAlpha = lerp(0.06, 0.20, z);
+
+      // blurred pass
+      sctx.save();
+      sctx.translate(ax, ay);
+      sctx.transform(1, 0, cL, dL, 0, 0);
+
+      sctx.globalCompositeOperation = "source-over";
+
+      sctx.filter = `blur(${blurPx}px)`;
+      sctx.globalAlpha = blurAlpha;
+      sctx.drawImage(layer.canvas, -w / 2, -h, w, h);
+
+      // sharp pass
+      sctx.filter = "none";
+      sctx.globalAlpha = sharpAlpha;
+      sctx.drawImage(layer.canvas, -w / 2, -h, w, h);
+
+      sctx.restore();
+    }
+
+    // Fade the whole shadow along the cast direction in screen space (robust for all transforms)
+    sctx.save();
+    sctx.setTransform(1, 0, 0, 1, 0, 0);
+    sctx.globalCompositeOperation = "destination-in";
+    sctx.filter = "none";
+    sctx.globalAlpha = 1;
+
+    // approximate max length: subject height * base cast * (1 + depthStrength)
+    const maxLen = Math.max(10, h * kBase * (1 + Math.max(0, depthStrength)) * 0.9);
+    const gx0 = ax;
+    const gy0 = ay;
+    const gx1 = ax + dirX * maxLen;
+    const gy1 = ay + dirY * maxLen;
+
+    const g = sctx.createLinearGradient(gx0, gy0, gx1, gy1);
+    g.addColorStop(0.0, "rgba(0,0,0,1.0)");
+    g.addColorStop(0.75, "rgba(0,0,0,0.55)");
+    g.addColorStop(1.0, "rgba(0,0,0,0.0)");
+
+    sctx.fillStyle = g;
+    sctx.fillRect(0, 0, shadowCanvas.width, shadowCanvas.height);
+
+    sctx.restore();
+
+    setShadowVersion((v) => v + 1);
+  }, [
+    bgSrc,
+    fgSrc,
+    fgPlacement,
+    light,
+    maskVersion,
+    depthVersion,
+    depthLayersVersion,
+    depthStrength,
+  ]);
 
   return (
     <div
@@ -559,6 +747,26 @@ export default function App() {
             onChange={(e) =>
               setLight((s) => ({ ...s, elev: Number(e.target.value) }))
             }
+          />
+        </label>
+
+        <label
+          style={{
+            display: "grid",
+            gap: 6,
+            minWidth: 260,
+            flex: "1 1 260px",
+          }}
+        >
+          Depth strength: {depthStrength.toFixed(2)}
+          <input
+            type="range"
+            min={0}
+            max={2}
+            step={0.01}
+            value={depthStrength}
+            onChange={(e) => setDepthStrength(Number(e.target.value))}
+            disabled={!depthBuf}
           />
         </label>
       </div>
