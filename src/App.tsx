@@ -47,7 +47,7 @@ export default function App() {
   const [depthBuf, setDepthBuf] = useState<Float32Array | null>(null);
   const [depthW, setDepthW] = useState(0);
   const [depthH, setDepthH] = useState(0);
-  const [depthVersion, setDepthVersion] = useState(0);
+  //const [depthVersion, setDepthVersion] = useState(0);
 
   // -----------------------------
   // File imports
